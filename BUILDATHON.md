@@ -86,6 +86,7 @@ The first backend slice is now available on the `progress` branch:
 - additive `entire graph coordinate` text and JSON output;
 - a loopback-only `/api/v1/report` endpoint and Vite proxy feeding the dashboard from the same immutable decision report;
 - revision-checked, atomic plan persistence through `/api/v1/plan`, plus privacy-bounded session discovery for onboarding;
+- privacy-filtered Entire checkpoint nodes, scoped only to session IDs explicitly connected to the team;
 - separate Team Setup, Plan & Assign, Spidey Tracker, and Agent Activity views so raw monitoring does not clutter the roadmap;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.

@@ -58,17 +58,19 @@ type Target struct {
 }
 
 type Report struct {
-	SchemaVersion string                `json:"schema_version"`
-	Graph         GraphProvenance       `json:"graph"`
-	Team          Team                  `json:"team"`
-	Missions      []Mission             `json:"missions"`
-	Decisions     []Decision            `json:"decisions"`
-	Diagnostics   []Diagnostic          `json:"diagnostics,omitempty"`
-	Summary       Summary               `json:"summary"`
-	Warnings      []sem.ProviderWarning `json:"graph_warnings,omitempty"`
-	Failures      []sem.PartialFailure  `json:"graph_partial_failures,omitempty"`
-	Sessions      []Session             `json:"sessions,omitempty"`
-	SessionHealth ProviderHealth        `json:"session_health"`
+	SchemaVersion    string                `json:"schema_version"`
+	Graph            GraphProvenance       `json:"graph"`
+	Team             Team                  `json:"team"`
+	Missions         []Mission             `json:"missions"`
+	Decisions        []Decision            `json:"decisions"`
+	Diagnostics      []Diagnostic          `json:"diagnostics,omitempty"`
+	Summary          Summary               `json:"summary"`
+	Warnings         []sem.ProviderWarning `json:"graph_warnings,omitempty"`
+	Failures         []sem.PartialFailure  `json:"graph_partial_failures,omitempty"`
+	Sessions         []Session             `json:"sessions,omitempty"`
+	SessionHealth    ProviderHealth        `json:"session_health"`
+	Checkpoints      []Checkpoint          `json:"checkpoints,omitempty"`
+	CheckpointHealth ProviderHealth        `json:"checkpoint_health"`
 }
 
 type ProviderHealth struct {
@@ -229,6 +231,10 @@ func Analyze(plan Plan, snapshot sem.ProviderSnapshot) (Report, error) {
 }
 
 func AnalyzeWithSessions(plan Plan, snapshot sem.ProviderSnapshot, sessions []Session, sessionHealth ProviderHealth) (Report, error) {
+	return AnalyzeWithActivity(plan, snapshot, sessions, sessionHealth, nil, ProviderHealth{})
+}
+
+func AnalyzeWithActivity(plan Plan, snapshot sem.ProviderSnapshot, sessions []Session, sessionHealth ProviderHealth, checkpoints []Checkpoint, checkpointHealth ProviderHealth) (Report, error) {
 	if err := ValidatePlan(plan); err != nil {
 		return Report{}, err
 	}
@@ -245,6 +251,7 @@ func AnalyzeWithSessions(plan Plan, snapshot sem.ProviderSnapshot, sessions []Se
 		Team: plan.Team, Missions: append([]Mission(nil), plan.Missions...),
 		Warnings: snapshot.Header.Warnings, Failures: snapshot.Header.PartialFailures,
 		Sessions: filterMappedSessions(plan.Team, sessions), SessionHealth: sessionHealth,
+		Checkpoints: filterMappedCheckpoints(plan.Team, checkpoints), CheckpointHealth: checkpointHealth,
 	}
 	resolved := make([]resolvedMission, 0, len(plan.Missions))
 	for _, mission := range plan.Missions {

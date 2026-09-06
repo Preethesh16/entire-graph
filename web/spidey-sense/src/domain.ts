@@ -105,4 +105,5 @@ export interface DashboardSnapshot {
   providers: ProviderHealth[];
   git: GitSnapshot;
   graph: GraphSnapshot;
+  checkpoints?: Array<{ id: string; message: string; date?: string; sessionId: string; condensationId?: string }>;
 }

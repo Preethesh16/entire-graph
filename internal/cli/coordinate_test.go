@@ -56,7 +56,7 @@ func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := coordinateHandler(store, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{})
+	handler := coordinateHandler(store, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/report", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -69,7 +69,7 @@ func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
 }
 
 func TestCoordinateListenRejectsNonLoopback(t *testing.T) {
-	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", "plan.json", coordinate.Plan{}, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{})
+	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", "plan.json", coordinate.Plan{}, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{})
 	if err == nil || !strings.Contains(err.Error(), "loopback") {
 		t.Fatalf("error = %v", err)
 	}

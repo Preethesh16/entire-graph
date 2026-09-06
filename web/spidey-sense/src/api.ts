@@ -35,6 +35,8 @@ interface CoordinateReport {
   }>;
   sessions?: Array<{ session_id: string; agent: string; status: string }>;
   session_health: { available: boolean; detail?: string };
+  checkpoints?: Array<{ id: string; message: string; date?: string; session_id: string; condensation_id?: string }>;
+  checkpoint_health?: { available: boolean; detail?: string };
 }
 
 interface ReportEndpoint { id: string; name: string; kind: string; file?: string; start_line?: number }
@@ -114,9 +116,11 @@ export function toDashboardSnapshot(report: CoordinateReport): DashboardSnapshot
     providers: [
       { id: 'graph', name: `${report.graph.provider} ${report.graph.provider_version}`, status: report.graph.completeness_level === 'complete' ? 'online' : 'degraded', detail: `${report.graph.profile} profile · ${report.graph.completeness_level}`, lastCheckedAt: generatedAt },
       { id: 'entire', name: 'Entire sessions', status: report.session_health.available ? 'online' : 'offline', detail: report.session_health.detail ?? `${report.sessions?.length ?? 0} mapped sessions`, lastCheckedAt: generatedAt },
+      { id: 'checkpoints', name: 'Entire checkpoints', status: report.checkpoint_health?.available ? 'online' : 'offline', detail: report.checkpoint_health?.detail ?? `${report.checkpoints?.length ?? 0} team checkpoints`, lastCheckedAt: generatedAt },
     ],
     git: { available: false, branch: '', head: '', dirtyFileCount: 0, ahead: 0, behind: 0, activity: [] },
     graph: { nodeCount: report.graph.node_count, relationCount: report.graph.relation_count, analyzedDepth: 2, complete: report.graph.completeness_level === 'complete', warning: report.graph.completeness_level === 'complete' ? undefined : `Graph is ${report.graph.completeness_level}` },
+    checkpoints: (report.checkpoints ?? []).map((checkpoint) => ({ id: checkpoint.id, message: checkpoint.message, date: checkpoint.date, sessionId: checkpoint.session_id, condensationId: checkpoint.condensation_id })),
   };
 }
 

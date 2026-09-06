@@ -54,12 +54,17 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 	if sessionErr != nil {
 		sessionHealth.Detail = sessionErr.Error()
 	}
-	report, err := coordinate.AnalyzeWithSessions(plan, snapshot, sessions, sessionHealth)
+	checkpoints, checkpointErr := coordinate.LoadEntireCheckpoints(ctx, "entire")
+	checkpointHealth := coordinate.ProviderHealth{Available: checkpointErr == nil}
+	if checkpointErr != nil {
+		checkpointHealth.Detail = checkpointErr.Error()
+	}
+	report, err := coordinate.AnalyzeWithActivity(plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth)
 	if err != nil {
 		return err
 	}
 	if flags.listen != "" {
-		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth)
+		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth)
 	}
 	if flags.format == "json" {
 		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
@@ -113,7 +118,7 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 	return flags, nil
 }
 
-func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth) error {
+func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
@@ -126,7 +131,7 @@ func serveCoordinate(ctx context.Context, opts Options, address, planPath string
 	if err != nil {
 		return err
 	}
-	handler := coordinateHandler(store, snapshot, sessions, health)
+	handler := coordinateHandler(store, snapshot, sessions, health, checkpoints, checkpointHealth)
 	server := &http.Server{
 		Addr: address, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
@@ -145,13 +150,13 @@ func serveCoordinate(ctx context.Context, opts Options, address, planPath string
 	return err
 }
 
-func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth) http.Handler {
+func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
 		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
 	})
 	mux.HandleFunc("GET /api/v1/report", func(out http.ResponseWriter, _ *http.Request) {
-		report, err := coordinate.AnalyzeWithSessions(store.Current(), snapshot, sessions, health)
+		report, err := coordinate.AnalyzeWithActivity(store.Current(), snapshot, sessions, health, checkpoints, checkpointHealth)
 		if err != nil {
 			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
