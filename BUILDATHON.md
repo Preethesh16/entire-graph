@@ -72,6 +72,28 @@ See `docs/spidey-sense-architecture.md` for the detailed design.
 - a larger 3D dependency world;
 - AI-written summaries grounded in the deterministic evidence.
 
+## Implementation progress
+
+The first backend slice is now available on the `progress` branch:
+
+- a versioned, dynamic team and mission-plan model;
+- validation for member ownership, mission status, targets, and repository-relative paths;
+- resolution of file and symbol targets against an Entire Graph full-profile snapshot;
+- same-symbol, same-file, direct dependency, and bounded two-hop decisions;
+- Graph evidence, confidence/resolution data, test targets, recommendations, and completeness caveats;
+- additive `entire graph coordinate` text and JSON output;
+- a clearly labeled synthetic plan at `examples/spidey-plan.json`;
+- focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
+
+Run the current slice from source:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . \
+  --plan examples/spidey-plan.json \
+  --format text
+```
+
 ## Entire Graph findings and verification
 
 Initial Graph searches located the repository's safe extension surfaces:
