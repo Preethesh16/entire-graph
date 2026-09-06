@@ -233,7 +233,7 @@ func writeCoordinateText(out io.Writer, report coordinate.Report) error {
 	if _, err := fmt.Fprintf(out, "Spidey Sense: %s\n", report.Team.Name); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "Graph: %s %s | profile=%s | completeness=%s\n", report.Graph.Provider, report.Graph.ProviderVersion, report.Graph.Profile, report.Graph.CompletenessLevel); err != nil {
+	if _, err := fmt.Fprintf(out, "Graph: %s %s | profile=%s | completeness=%s | warnings=%d | partial_failures=%d\n", report.Graph.Provider, report.Graph.ProviderVersion, report.Graph.Profile, report.Graph.CompletenessLevel, report.Graph.WarningCount, report.Graph.PartialFailureCount); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(out, "Decisions: %d BLOCK | %d REVIEW | %d CLEAR\n", report.Summary.Block, report.Summary.Review, report.Summary.Clear); err != nil {
@@ -247,7 +247,7 @@ func writeCoordinateText(out io.Writer, report coordinate.Report) error {
 		return err
 	}
 	for _, decision := range report.Decisions {
-		if _, err := fmt.Fprintf(out, "\n[%s] %s <-> %s: %s\n", decision.Level, decision.MissionA, decision.MissionB, decision.Reason); err != nil {
+		if _, err := fmt.Fprintf(out, "\n[%s/%s] %s <-> %s: %s\n", decision.Level, strings.ToUpper(decision.EvidenceClass), decision.MissionA, decision.MissionB, decision.Reason); err != nil {
 			return err
 		}
 		for _, step := range decision.Path {
@@ -258,7 +258,7 @@ func writeCoordinateText(out io.Writer, report coordinate.Report) error {
 					location += fmt.Sprintf(":%d", step.From.StartLine)
 				}
 			}
-			if _, err := fmt.Fprintf(out, "  %s --%s/%s--> %s", step.From.Name, step.Relation, step.Direction, step.To.Name); err != nil {
+			if _, err := fmt.Fprintf(out, "  %s --%s/%s/%s--> %s", step.From.Name, step.Relation, step.Direction, step.EvidenceClass, step.To.Name); err != nil {
 				return err
 			}
 			if location != "" {
@@ -277,6 +277,15 @@ func writeCoordinateText(out io.Writer, report coordinate.Report) error {
 		}
 		for _, target := range decision.TestTargets {
 			if _, err := fmt.Fprintf(out, "  Test: %s\n", target); err != nil {
+				return err
+			}
+		}
+		for _, verification := range decision.Verification {
+			label := "Verify"
+			if decision.VerificationRequired {
+				label = "Verify (required)"
+			}
+			if _, err := fmt.Fprintf(out, "  %s: %s\n", label, verification); err != nil {
 				return err
 			}
 		}

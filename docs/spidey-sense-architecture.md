@@ -85,6 +85,14 @@ Initial decision semantics:
 
 These are coordination decisions, not compiler guarantees. Each result includes the target pair, ordered path, relation types, evidence locations, confidence/resolution, recommendation, and completeness caveat.
 
+Each path step and decision also carries an evidence class:
+
+- **confirmed:** exact, package-bound, or import-bound structural evidence with no truncation warning;
+- **heuristic:** name-, pattern-, inferred-, framework-, test-, or co-change evidence;
+- **incomplete:** evidence with dropped/truncated support, or any Graph result produced from a degraded/partial snapshot.
+
+Only confirmed direct structural evidence can produce a relationship-based `BLOCK`. Heuristic or incomplete paths produce `REVIEW` and an explicit source/test verification requirement. A bounded absence is always labeled incomplete: `CLEAR` never means the runtime programs are independent.
+
 Recommendations are rule-based and verifiable:
 
 - sequence the upstream/dependency mission first;
@@ -92,6 +100,7 @@ Recommendations are rule-based and verifiable:
 - review named callers/type consumers;
 - run or inspect Graph-linked/conventional tests;
 - ask for manual review when evidence is incomplete.
+- inspect source/runtime registration and run focused tests when dynamic dispatch, reflection, generated code, or partial failures limit static resolution.
 
 ### 5. Read-only Git adapter
 

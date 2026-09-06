@@ -233,6 +233,9 @@ main { width: min(1600px, 94vw); margin: 0 auto; }
 .risk-card > span:last-child { color: #8494ad; font-size: .68rem; line-height: 1.5; }
 
 .evidence-heading { align-items: flex-start; }
+.evidence-class { margin: 0 18px 12px; padding: 7px 9px; border-left: 2px solid currentColor; background: rgba(255,255,255,.025); color: var(--green); font-family: 'Cascadia Code', Consolas, monospace; font-size: .58rem; text-transform: uppercase; }
+.evidence-class.evidence-heuristic { color: var(--yellow); }
+.evidence-class.evidence-incomplete { color: var(--red); }
 .evidence-path { position: relative; display: grid; gap: 0; margin: 0; padding: 20px 18px 10px; list-style: none; }
 .evidence-path li { position: relative; display: grid; justify-items: center; }
 .evidence-node { z-index: 1; display: grid; gap: 5px; width: 100%; padding: 14px; border: 1px solid rgba(255,255,255,.14); background: #090b0a; }
@@ -245,6 +248,8 @@ main { width: min(1600px, 94vw); margin: 0 auto; }
 .recommendation strong { font-size: .74rem; line-height: 1.55; }
 .review-targets { padding: 10px 18px 20px; }
 .review-targets .eyebrow { width: 100%; margin-bottom: 4px; }
+.verification-path { border-top: 1px solid rgba(255,255,255,.06); }
+.verification-path span { color: #c8cdca; font-size: .64rem; line-height: 1.5; }
 .clear-evidence { display: flex; gap: 12px; margin: 18px; padding: 16px; border: 1px solid rgba(33,217,162,.22); background: rgba(33,217,162,.05); }
 .clear-evidence > span { display: grid; flex: 0 0 30px; height: 30px; place-items: center; border-radius: 50%; color: var(--green); background: rgba(33,217,162,.12); }
 .clear-evidence strong { font-size: .76rem; }

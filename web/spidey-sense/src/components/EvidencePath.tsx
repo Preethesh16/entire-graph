@@ -28,6 +28,11 @@ export function EvidencePath({ risk }: EvidencePathProps) {
         <StatusPill status={risk.level} />
       </div>
 
+      <p className={`evidence-class evidence-${risk.evidenceClass}`}>
+        Evidence: <strong>{risk.evidenceClass}</strong>
+        {risk.verificationRequired ? ' · source or test verification required' : ' · structurally confirmed'}
+      </p>
+
       {risk.evidenceNodes.length === 0 ? (
         <div className="clear-evidence">
           <span aria-hidden="true">✓</span>
@@ -50,7 +55,7 @@ export function EvidencePath({ risk }: EvidencePathProps) {
                 {relation ? (
                   <div className="relation-chip">
                     <span>{relation.type}</span>
-                    <span>{Math.round(relation.confidence * 100)}% · {relation.resolution}</span>
+                    <span>{Math.round(relation.confidence * 100)}% · {relation.evidenceClass}</span>
                   </div>
                 ) : null}
               </li>
@@ -71,6 +76,11 @@ export function EvidencePath({ risk }: EvidencePathProps) {
         ) : (
           risk.reviewTargets.map((target) => <code key={target}>{target}</code>)
         )}
+      </div>
+
+      <div className="review-targets verification-path">
+        <p className="eyebrow">Verification path</p>
+        {risk.verification.map((step) => <span key={step}>{step}</span>)}
       </div>
     </section>
   );

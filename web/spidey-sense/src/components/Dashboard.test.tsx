@@ -70,6 +70,24 @@ describe('Dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Work in motion' })).toBeInTheDocument();
   });
 
+  it('distinguishes incomplete Graph evidence and exposes a verification path', () => {
+    const incompleteRisk = {
+      ...syntheticDashboardFixture.risks[1],
+      evidenceClass: 'incomplete' as const,
+      verificationRequired: true,
+      verification: ['Inspect the generated registry and run the dispatcher integration test.'],
+    };
+    render(<Dashboard snapshot={snapshotWith({
+      risks: [incompleteRisk],
+      graph: { ...syntheticDashboardFixture.graph, complete: false, warningCount: 1, partialFailureCount: 1, warning: 'Generated dispatch targets were not indexed' },
+    })} />);
+
+    expect(screen.getByText(/Evidence:/)).toHaveTextContent('incomplete');
+    expect(screen.getByText(/source or test verification required/)).toBeInTheDocument();
+    expect(screen.getByText(incompleteRisk.verification[0])).toBeInTheDocument();
+    expect(screen.getByText('1 warnings · 1 partial failures')).toBeInTheDocument();
+  });
+
   it('renders stable loading and aggregate error states', () => {
     const { rerender } = render(<Dashboard loading />);
     expect(screen.getByText('Mapping the mission web…')).toBeInTheDocument();

@@ -129,13 +129,22 @@ These findings were checked against focused source reads. Spidey Sense will cons
 
 ## Noon Curveball: what changed and how we adapted
 
-Not announced yet. The pre-Curveball architecture isolates inputs, policy, and presentation so a new provider, rule, output constraint, or reliability requirement can be added without replacing the coordination engine.
+**Track 2: Graph is evidence, not an oracle.** The curveball requires honest handling of dynamic dispatch, generated code, reflection, and other cases where static relationships may be partial.
+
+The pre-Curveball architecture already carried Graph confidence, resolution, warnings, partial failures, completeness, and a bounded `CLEAR` caveat. The implementation audit found four remaining gaps, now folded into the plan and implementation:
+
+1. Classify every decision and relationship as `confirmed`, `heuristic`, or `incomplete`.
+2. Prevent heuristic or repository-partial relationships from being presented as certain blockers; they become `REVIEW` evidence that requires verification.
+3. Return and render an explicit source/test verification path, plus warning and partial-failure counts.
+4. Test a degraded fixture containing unresolved dynamic dispatch and unavailable generated source.
+
+Entire Graph identified the runtime evidence consumer in `internal/coordinate/coordinate.go`, its text/API projection in `internal/cli/coordinate.go`, and the dashboard projection in `web/spidey-sense/src/api.ts`. `impact` is currently a development-time verification input, not user-facing runtime evidence. Checkpoint semantic diff remains a planned adapter and is not yet used to make dashboard claims; when added, it must use the same evidence classification and verification contract.
 
 ## Checkpoint links and what each checkpoint proves
 
 1. **Initial understanding and architecture:** this document, architecture, scope, prior-work disclosure, and Curveball seams.
 2. **Stable pre-Curveball implementation:** integrated dynamic team/session onboarding, revision-safe leader planning, Graph-backed coordination decisions, team-scoped checkpoints, loopback API, and tested React dashboard. Recorded by the checkpoint commit that marks this milestone.
-3. **Curveball response:** pending.
+3. **Curveball response:** Track 2 evidence classification, partial-analysis fallback, verification paths, and fixtures; checkpoint pending final verification.
 4. **Final implementation and verification:** pending.
 
 Checkpoint IDs and links will be added as they are created.
@@ -167,6 +176,7 @@ The abstract “codebase as a place” idea was also studied in Claude Clan. No 
 - Keep any future agent action explicit, allowlisted, and auditable.
 - Never commit tokens, credentials, live activity files, or private session data.
 - Surface Graph incompleteness and heuristic edges instead of claiming certainty.
+- Require source or test verification for heuristic, incomplete, and bounded-absence (`CLEAR`) claims.
 
 ## Visual identity
 
@@ -178,4 +188,5 @@ The interface uses an original spider-inspired night-radar aesthetic: web zones,
 - Agent-to-human identity mapping remains explicit.
 - Static analysis is heuristic and may miss dynamic dispatch or runtime wiring.
 - `CLEAR` means no risk was found within the analyzed scope, not proof of independence.
+- Checkpoint semantic diff is not yet a runtime dashboard input; no intent-drift claim is made from it.
 - GitHub network integration and direct agent messaging are intentionally outside the first stable slice.

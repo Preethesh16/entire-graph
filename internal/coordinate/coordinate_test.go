@@ -1,6 +1,7 @@
 package coordinate
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/entireio/entire-graph/internal/sem"
@@ -8,6 +9,7 @@ import (
 
 func TestAnalyzeDynamicMissionsFindsDirectCallRisk(t *testing.T) {
 	snapshot := testSnapshot()
+	snapshot.Header.Warnings = []sem.ProviderWarning{{Code: "W_WORKTREE_SNAPSHOT", Severity: "warning", EffectOnCompleteness: "snapshot records are read from the working tree"}}
 	plan := Plan{
 		SchemaVersion: PlanSchemaVersion,
 		Team: Team{ID: "web-team", Name: "Web Team", Members: []Member{
@@ -29,8 +31,75 @@ func TestAnalyzeDynamicMissionsFindsDirectCallRisk(t *testing.T) {
 	if decision.Level != "BLOCK" || len(decision.Path) != 1 || decision.Path[0].Relation != "CALLS" {
 		t.Fatalf("decision = %#v", decision)
 	}
+	if decision.EvidenceClass != "confirmed" || decision.VerificationRequired {
+		t.Fatalf("confirmed decision classification = %#v", decision)
+	}
+	if report.Graph.AnalysisPartial {
+		t.Fatalf("worktree provenance incorrectly marked analysis partial: %#v", report.Graph)
+	}
 	if len(decision.TestTargets) != 1 || decision.TestTargets[0] != "internal/sem/analyze_test.go" {
 		t.Fatalf("test targets = %#v", decision.TestTargets)
+	}
+}
+
+func TestAnalyzeIncompleteDynamicDispatchRequiresVerification(t *testing.T) {
+	snapshot := testSnapshot()
+	snapshot.Header.Stats.CompletenessLevel = "degraded"
+	snapshot.Header.Warnings = []sem.ProviderWarning{{
+		Code: "W_DYNAMIC_DISPATCH", Severity: "warning", FilePath: "internal/cli/root.go",
+		EffectOnCompleteness: "runtime target may be missing", Detail: "reflection prevents complete call resolution",
+	}}
+	snapshot.Header.PartialFailures = []sem.PartialFailure{{
+		Code: "E_GENERATED_SOURCE_UNAVAILABLE", Severity: "warning", FilePath: "generated/registry.go",
+		EffectOnCompleteness: "generated dispatch targets were not indexed",
+	}}
+	plan := Plan{
+		SchemaVersion: PlanSchemaVersion,
+		Team:          Team{ID: "team", Name: "Team", Members: []Member{{ID: "one", Name: "One"}, {ID: "two", Name: "Two"}}},
+		Missions: []Mission{
+			{ID: "dispatcher", Title: "Dispatcher", Owner: "one", Status: "active", Targets: []Target{{Symbol: "runCheckpoint"}}},
+			{ID: "handler", Title: "Handler", Owner: "two", Status: "active", Targets: []Target{{Symbol: "AnalyzeCheckpoint"}}},
+		},
+	}
+	report, err := Analyze(plan, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := report.Decisions[0]
+	if decision.Level != "REVIEW" || decision.EvidenceClass != "incomplete" || !decision.VerificationRequired {
+		t.Fatalf("incomplete decision = %#v", decision)
+	}
+	if len(decision.Verification) == 0 || !strings.Contains(decision.Caveat, "warnings=1, failures=1") {
+		t.Fatalf("missing safe verification path or diagnostics: %#v", decision)
+	}
+	if decision.Path[0].EvidenceClass != "confirmed" {
+		t.Fatalf("confirmed step should remain distinguishable inside partial analysis: %#v", decision.Path[0])
+	}
+	if report.Graph.WarningCount != 1 || report.Graph.PartialFailureCount != 1 || !report.Graph.AnalysisPartial {
+		t.Fatalf("graph provenance = %#v", report.Graph)
+	}
+}
+
+func TestAnalyzeHeuristicRelationshipRequiresVerification(t *testing.T) {
+	snapshot := testSnapshot()
+	snapshot.Relations[0].Confidence = 0.66
+	snapshot.Relations[0].Resolution = "name_only"
+	snapshot.Relations[0].Reason = "call target selected by runtime registry"
+	plan := Plan{
+		SchemaVersion: PlanSchemaVersion,
+		Team:          Team{ID: "team", Name: "Team", Members: []Member{{ID: "one", Name: "One"}, {ID: "two", Name: "Two"}}},
+		Missions: []Mission{
+			{ID: "dispatcher", Title: "Dispatcher", Owner: "one", Status: "active", Targets: []Target{{Symbol: "runCheckpoint"}}},
+			{ID: "handler", Title: "Handler", Owner: "two", Status: "active", Targets: []Target{{Symbol: "AnalyzeCheckpoint"}}},
+		},
+	}
+	report, err := Analyze(plan, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := report.Decisions[0]
+	if decision.Level != "REVIEW" || decision.EvidenceClass != "heuristic" || !decision.VerificationRequired || decision.Path[0].EvidenceClass != "heuristic" {
+		t.Fatalf("heuristic decision = %#v", decision)
 	}
 }
 
@@ -138,7 +207,7 @@ func TestAnalyzeExposesOnlyExplicitlyMappedSessions(t *testing.T) {
 
 func testSnapshot() sem.ProviderSnapshot {
 	return sem.ProviderSnapshot{
-		Header: sem.SnapshotHeader{SchemaVersion: "1.1", Provider: "entire-graph", ProviderVersion: "test", RepoRoot: "/repo", Profile: "full", Stats: sem.ProviderStats{CompletenessLevel: "complete"}},
+		Header: sem.SnapshotHeader{SchemaVersion: "1.1", Provider: "entire-graph", ProviderVersion: "test", RepoRoot: "/repo", Profile: "full", Stats: sem.ProviderStats{CompletenessLevel: "ok"}},
 		Files: []sem.FileRecord{
 			{ID: "file-cli", Path: "internal/cli/root.go"},
 			{ID: "file-sem", Path: "internal/sem/analyze.go"},
