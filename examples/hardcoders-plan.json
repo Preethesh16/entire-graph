@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "revision": 1,
+  "team": {
+    "id": "hardcoders-production",
+    "name": "HardCoders Production Team",
+    "call_sign": "Anchor Signal Room",
+    "objective": "Coordinate changes across Anchor's compliance, FX, payment, and product surfaces using inspectable structural evidence.",
+    "members": [
+      { "id": "platform", "name": "Preethesh", "role": "Platform lead", "archetype": "Systems architect", "accent": "#a9d6ff", "session_ids": [] },
+      { "id": "payments", "name": "Payments Runner", "role": "Settlement engineer", "archetype": "Flow guardian", "accent": "#78e2ba", "session_ids": [] },
+      { "id": "experience", "name": "Experience Runner", "role": "Product engineer", "archetype": "Interface signal", "accent": "#c9b6ff", "session_ids": [] },
+      { "id": "assurance", "name": "Assurance Runner", "role": "Verification engineer", "archetype": "Evidence sentinel", "accent": "#f4be7c", "session_ids": [] }
+    ]
+  },
+  "missions": [
+    {
+      "id": "quote-engine",
+      "title": "Evolve corridor quote construction",
+      "intent": "Change fee and rate composition while preserving canonical quote integrity.",
+      "owner": "platform",
+      "status": "active",
+      "targets": [{ "file": "apps/api/src/fx/quote.ts", "symbol": "buildQuote" }]
+    },
+    {
+      "id": "payment-orchestration",
+      "title": "Integrate payment quote orchestration",
+      "intent": "Consume executable quote behavior inside the durable payment lifecycle.",
+      "owner": "payments",
+      "status": "active",
+      "targets": [{ "file": "apps/api/src/payments/service.ts", "symbol": "PaymentService.quote" }]
+    },
+    {
+      "id": "route-contract",
+      "title": "Harden API route contracts",
+      "intent": "Keep public route wiring aligned with payment and compliance services.",
+      "owner": "assurance",
+      "status": "queued",
+      "targets": [{ "file": "apps/api/src/routes/index.ts", "symbol": "registerRoutes" }]
+    },
+    {
+      "id": "product-surface",
+      "title": "Refine payment evidence experience",
+      "intent": "Expose trustworthy payment state and evidence without inventing backend certainty.",
+      "owner": "experience",
+      "status": "queued",
+      "targets": [{ "file": "apps/web/lib/api.ts" }]
+    }
+  ]
+}

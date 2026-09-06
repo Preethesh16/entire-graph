@@ -26,7 +26,7 @@ func TestNetworkStoreCrossMachineLifecyclePersistsHashedCredentials(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, cancel, err := store.Subscribe(created.TeamID, created.AdminToken)
+	events, cancel, err := store.Subscribe(created.TeamID, joined.ViewerToken)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +57,9 @@ func TestNetworkStoreCrossMachineLifecyclePersistsHashedCredentials(t *testing.T
 	if _, err := store.Agents(created.TeamID, "wrong"); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("wrong admin token error = %v", err)
 	}
+	if agents, err := store.Agents(created.TeamID, joined.ViewerToken); err != nil || len(agents) != 1 {
+		t.Fatalf("member viewer token cannot read team: agents=%#v err=%v", agents, err)
+	}
 
 	reopened, err := OpenNetworkStore(path)
 	if err != nil {
@@ -70,7 +73,7 @@ func TestNetworkStoreCrossMachineLifecyclePersistsHashedCredentials(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{created.InviteCode, created.AdminToken, created.ConnectorToken, joined.ConnectorToken, connected.AgentToken} {
+	for _, secret := range []string{created.InviteCode, created.AdminToken, created.ConnectorToken, created.ViewerToken, joined.ConnectorToken, joined.ViewerToken, connected.AgentToken} {
 		if strings.Contains(string(content), secret) {
 			t.Fatalf("plaintext credential persisted: %s", secret)
 		}

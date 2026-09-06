@@ -26,7 +26,7 @@ The core monitor is not another autonomous AI agent. It is a coordinator service
 
 ### Public activity only
 
-The system may display public prompt summaries, statuses, timestamps, worktrees, and touched files exposed by supported tools. It does not read hidden reasoning or claim to know what a model is privately thinking.
+The system may display bounded statuses, timestamps, worktrees, and touched-file paths exposed by supported tools. It never transports prompt text or reasoning and never claims to know what a model is privately thinking.
 
 ### Plan plus observation
 
@@ -34,7 +34,7 @@ Session telemetry alone cannot reliably identify the human owner or intended sco
 
 ### Shared coordinator with local-first metadata
 
-A loopback dashboard remains available for local development. Real team connectivity uses a shared deployed or explicitly LAN-bound coordinator plus a connector running in each teammate's Entire-enabled clone. The connector sends only allowlisted public metadata; it never sends prompts, reasoning, terminal output, file content, or secrets.
+A loopback dashboard remains available for local development. Real team membership, invites, browser presence, and live rosters use the shared deployed or explicitly LAN-bound coordinator directly from the website. A local connector is optional for richer Entire/Git metadata that browser sandboxing cannot inspect. Both paths use allowlisted wire contracts and never send prompts, reasoning, terminal output, file content, or secrets.
 
 ### Original visual identity
 
@@ -77,7 +77,7 @@ The general “codebase as a place” interaction pattern was studied in Claude 
 - GitHub REST synchronization;
 - arbitrary shell access;
 - historical analytics;
-- large decorative 3D scenes before the decision workflow is stable;
+- decorative 3D assets that do not improve evidence comprehension;
 - unsupported AI risk scoring.
 
 ## Open questions to resolve during implementation

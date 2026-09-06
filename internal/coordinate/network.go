@@ -43,6 +43,7 @@ type TeamCredentials struct {
 	AdminToken     string `json:"admin_token"`
 	MemberID       string `json:"member_id"`
 	ConnectorToken string `json:"connector_token"`
+	ViewerToken    string `json:"viewer_token"`
 }
 
 type JoinTeamRequest struct {
@@ -55,6 +56,7 @@ type JoinCredentials struct {
 	TeamID         string `json:"team_id"`
 	MemberID       string `json:"member_id"`
 	ConnectorToken string `json:"connector_token"`
+	ViewerToken    string `json:"viewer_token"`
 }
 
 type ConnectAgentRequest struct {
@@ -130,6 +132,7 @@ type networkMember struct {
 	Name          string `json:"name"`
 	Role          string `json:"role,omitempty"`
 	ConnectorHash string `json:"connector_hash"`
+	ViewerHash    string `json:"viewer_hash"`
 }
 
 type agentRecord struct {
@@ -219,19 +222,23 @@ func (store *NetworkStore) CreateTeam(request CreateTeamRequest) (TeamCredential
 	if err != nil {
 		return TeamCredentials{}, err
 	}
+	viewer, err := randomValue("viewer_", 32)
+	if err != nil {
+		return TeamCredentials{}, err
+	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	store.state.Teams[teamID] = &teamRecord{
 		ID: teamID, Name: strings.TrimSpace(request.Name), Objective: strings.TrimSpace(request.Objective),
 		InviteHash: tokenHash(invite), AdminHash: tokenHash(admin), CreatedAt: store.now().UTC().Format(time.RFC3339Nano),
-		Members: map[string]*networkMember{memberID: {ID: memberID, Name: strings.TrimSpace(request.LeaderName), Role: strings.TrimSpace(request.LeaderRole), ConnectorHash: tokenHash(connector)}},
+		Members: map[string]*networkMember{memberID: {ID: memberID, Name: strings.TrimSpace(request.LeaderName), Role: strings.TrimSpace(request.LeaderRole), ConnectorHash: tokenHash(connector), ViewerHash: tokenHash(viewer)}},
 		Agents:  map[string]*agentRecord{},
 	}
 	if err := store.persistLocked(); err != nil {
 		delete(store.state.Teams, teamID)
 		return TeamCredentials{}, err
 	}
-	return TeamCredentials{TeamID: teamID, InviteCode: invite, AdminToken: admin, MemberID: memberID, ConnectorToken: connector}, nil
+	return TeamCredentials{TeamID: teamID, InviteCode: invite, AdminToken: admin, MemberID: memberID, ConnectorToken: connector, ViewerToken: viewer}, nil
 }
 
 func (store *NetworkStore) JoinTeam(teamID string, request JoinTeamRequest) (JoinCredentials, error) {
@@ -258,12 +265,16 @@ func (store *NetworkStore) JoinTeam(teamID string, request JoinTeamRequest) (Joi
 	if err != nil {
 		return JoinCredentials{}, err
 	}
-	team.Members[memberID] = &networkMember{ID: memberID, Name: strings.TrimSpace(request.Name), Role: strings.TrimSpace(request.Role), ConnectorHash: tokenHash(connector)}
+	viewer, err := randomValue("viewer_", 32)
+	if err != nil {
+		return JoinCredentials{}, err
+	}
+	team.Members[memberID] = &networkMember{ID: memberID, Name: strings.TrimSpace(request.Name), Role: strings.TrimSpace(request.Role), ConnectorHash: tokenHash(connector), ViewerHash: tokenHash(viewer)}
 	if err := store.persistLocked(); err != nil {
 		delete(team.Members, memberID)
 		return JoinCredentials{}, err
 	}
-	return JoinCredentials{TeamID: teamID, MemberID: memberID, ConnectorToken: connector}, nil
+	return JoinCredentials{TeamID: teamID, MemberID: memberID, ConnectorToken: connector, ViewerToken: viewer}, nil
 }
 
 func (store *NetworkStore) ConnectAgent(token string, request ConnectAgentRequest) (AgentCredentials, error) {
@@ -343,7 +354,7 @@ func (store *NetworkStore) Agents(teamID, token string) ([]ConnectedAgent, error
 	if !ok {
 		return nil, ErrTeamNotFound
 	}
-	if !tokenMatches(token, team.AdminHash) {
+	if !teamCanRead(team, token) {
 		return nil, ErrUnauthorized
 	}
 	agents := make([]ConnectedAgent, 0, len(team.Agents))
@@ -361,7 +372,7 @@ func (store *NetworkStore) Subscribe(teamID, token string) (<-chan TeamEvent, fu
 	if !ok {
 		return nil, nil, ErrTeamNotFound
 	}
-	if !tokenMatches(token, team.AdminHash) {
+	if !teamCanRead(team, token) {
 		return nil, nil, ErrUnauthorized
 	}
 	channel := make(chan TeamEvent, 16)
@@ -378,6 +389,18 @@ func (store *NetworkStore) Subscribe(teamID, token string) (<-chan TeamEvent, fu
 		}
 	}
 	return channel, cancel, nil
+}
+
+func teamCanRead(team *teamRecord, token string) bool {
+	if tokenMatches(token, team.AdminHash) {
+		return true
+	}
+	for _, member := range team.Members {
+		if tokenMatches(token, member.ViewerHash) {
+			return true
+		}
+	}
+	return false
 }
 
 func (store *NetworkStore) findAgentLocked(agentID string) (*teamRecord, *agentRecord) {

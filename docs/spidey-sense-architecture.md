@@ -122,7 +122,7 @@ The service stays loopback-only by default, but can be explicitly bound to a rea
 
 Writes are bounded JSON requests. No endpoint accepts arbitrary commands. Errors are structured, and one unavailable provider cannot take down the aggregate response.
 
-Invite, admin, connector, and per-agent credentials are generated from cryptographic randomness and stored only as hashes. Names and roles come from explicit user input. The connector detects agent, model, session, branch, changed paths, checkpoint, and activity through bounded local commands, but its wire structs contain no prompt, reasoning, terminal, file-content, environment, or secret fields.
+Invite, admin, member-viewer, connector, and per-agent credentials are generated from cryptographic randomness and stored only as hashes. Names and roles come from explicit user input. The production website creates and joins rooms, registers detected browser presence, sends bounded heartbeats, and consumes authenticated SSE using a streaming fetch. It explicitly marks Git, Entire session, changed-file, and checkpoint metadata unavailable because a normal browser cannot observe them. The optional local connector can provide those allowlisted fields, but neither path has prompt, reasoning, terminal, file-content, environment, or secret fields.
 
 The connectivity contract is:
 
@@ -143,6 +143,7 @@ The dashboard prioritizes the decision workflow:
 - Web Zones for repository areas;
 - Web Nodes for files/symbols;
 - Strands for real Graph relations;
+- an SVG depth projection that remains keyboard-accessible and works without WebGL;
 - red Tangles for explainable risks;
 - a textual evidence drawer and recommended action;
 - Git timeline and provider health.

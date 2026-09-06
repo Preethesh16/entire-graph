@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { DashboardSnapshot, RiskLevel } from '../domain';
 import { EvidencePath } from './EvidencePath';
+import { GraphExperience } from './GraphExperience';
 import { MissionPathways } from './MissionPathways';
 import { RiskConsole } from './RiskConsole';
 import { GitPanel, GraphPanel, ProviderPanel } from './SystemPanels';
@@ -92,6 +93,8 @@ export function Dashboard({ snapshot, loading = false, error }: DashboardProps) 
           <article><span>Graph relations</span><strong>{snapshot.graph.relationCount.toLocaleString()}</strong><small>depth {snapshot.graph.analyzedDepth} analysis</small></article>
         </section>
 
+		<GraphExperience snapshot={snapshot} />
+
         <div className="dashboard-grid">
           <div className="primary-column">
             <TeamLobby team={snapshot.team} runners={snapshot.runners} missions={snapshot.missions} />
@@ -108,7 +111,7 @@ export function Dashboard({ snapshot, loading = false, error }: DashboardProps) 
       </main>
 
       <footer>
-        <span>Local-first coordination</span>
+        <span>Shared, privacy-bounded coordination</span>
         <span>Evidence, not oracle · CLEAR is bounded, not guaranteed</span>
       </footer>
     </div>

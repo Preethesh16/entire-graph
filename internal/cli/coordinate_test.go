@@ -142,6 +142,10 @@ func TestCoordinateNetworkEndpointsAuthenticateAndRejectPromptFields(t *testing.
 	if agentsResponse.Code != http.StatusOK || strings.Contains(agentsResponse.Body.String(), "prompt") || !strings.Contains(agentsResponse.Body.String(), "remote-session") {
 		t.Fatalf("agents = %d %s", agentsResponse.Code, agentsResponse.Body.String())
 	}
+	viewerResponse := call(http.MethodGet, "/api/v1/teams/"+created.TeamID+"/agents", joined.ViewerToken, "")
+	if viewerResponse.Code != http.StatusOK {
+		t.Fatalf("viewer agents = %d %s", viewerResponse.Code, viewerResponse.Body.String())
+	}
 
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -151,7 +155,7 @@ func TestCoordinateNetworkEndpointsAuthenticateAndRejectPromptFields(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	streamRequest.Header.Set("Authorization", "Bearer "+created.AdminToken)
+	streamRequest.Header.Set("Authorization", "Bearer "+joined.ViewerToken)
 	streamResponse, err := server.Client().Do(streamRequest)
 	if err != nil {
 		t.Fatal(err)

@@ -88,9 +88,11 @@ The first backend slice is now available on the `progress` branch:
 - revision-checked, atomic plan persistence through `/api/v1/plan`, plus privacy-bounded session discovery for onboarding;
 - privacy-filtered Entire checkpoint nodes, scoped only to session IDs explicitly connected to the team;
 - persisted team invites, manually entered member identity, token-scoped connector registration, bounded heartbeats, authenticated agent listing, and SSE events for genuine cross-machine coordination;
+- production browser onboarding for creating rooms, joining invites, publishing bounded presence, and viewing the authenticated live roster without terminal interaction;
 - an `entire graph connect-agent` command that detects only allowlisted Entire/Git metadata and never transmits prompts, reasoning, terminal output, file contents, or secrets;
 - explicit `--allow-remote` LAN/deployment binding while retaining loopback as the safe default;
-- separate Team Setup, Plan & Assign, Spidey Tracker, and Agent Activity views so raw monitoring does not clutter the roadmap;
+- separate Connect Team, Plan & Assign, Graph Space, and Live Activity views, plus an accessible spatial relationship canvas;
+- a production mission plan for the real `Preethesh16/HardCoders_` Anchor repository at `examples/hardcoders-plan.json`;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
 
@@ -103,12 +105,12 @@ go run ./cmd/entire-graph coordinate \
   --format text
 ```
 
-Run the integrated dashboard in two terminals:
+Run the production HardCoders visualization in two terminals:
 
 ```bash
 go run ./cmd/entire-graph coordinate \
-  --repo . \
-  --plan examples/spidey-plan.json \
+  --repo /path/to/HardCoders_ \
+  --plan examples/hardcoders-plan.json \
   --listen 127.0.0.1:4317
 ```
 
@@ -118,7 +120,7 @@ npm ci
 npm run dev
 ```
 
-The development server proxies `/api` to the loopback backend. Synthetic dashboard data remains only as an explicit test/demo fixture; production `App.tsx` loads the real API and renders honest loading or provider-error states. The Git panel reports that its adapter is not connected instead of displaying fabricated activity.
+The development server proxies `/api` to the loopback backend. The production browser opens on **Connect Team**: the leader creates a room and copies its invite; teammates join in their own browser, select a declared mission, and receive authenticated SSE presence updates. Browser presence is labeled honestly and never claims access to local Git or Entire metadata. Synthetic data remains test-only.
 
 For a LAN-accessible shared coordinator, persist credentials outside the repository and bind explicitly:
 
@@ -129,14 +131,7 @@ go run ./cmd/entire-graph coordinate \
   --network-state /var/lib/spidey-sense/network.json
 ```
 
-Create a team through `POST /api/v1/teams`, share only its returned invite code and team ID, then run this from each teammate clone:
-
-```bash
-entire graph connect-agent \
-  --server http://192.168.1.20:4317 --allow-insecure-http \
-  --team <team-id> --invite <invite-code> \
-  --name "Deepthi" --role "UI engineer" --mission connection-ui
-```
+Open the website, choose **Create room**, and share the displayed team ID and invite code. Teammates choose **Join invite** in the same website; no terminal onboarding is part of the product workflow. The optional `connect-agent` CLI remains available only when a teammate explicitly wants richer locally detected Entire/Git metadata that web sandboxing cannot access.
 
 Use HTTPS for a deployed server. Plain remote HTTP requires an explicit LAN-only opt-in.
 
