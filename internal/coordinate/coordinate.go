@@ -61,6 +61,13 @@ type Report struct {
 	Summary       Summary               `json:"summary"`
 	Warnings      []sem.ProviderWarning `json:"graph_warnings,omitempty"`
 	Failures      []sem.PartialFailure  `json:"graph_partial_failures,omitempty"`
+	Sessions      []Session             `json:"sessions,omitempty"`
+	SessionHealth ProviderHealth        `json:"session_health"`
+}
+
+type ProviderHealth struct {
+	Available bool   `json:"available"`
+	Detail    string `json:"detail,omitempty"`
 }
 
 type GraphProvenance struct {
@@ -207,6 +214,10 @@ type adjacent struct {
 }
 
 func Analyze(plan Plan, snapshot sem.ProviderSnapshot) (Report, error) {
+	return AnalyzeWithSessions(plan, snapshot, nil, ProviderHealth{})
+}
+
+func AnalyzeWithSessions(plan Plan, snapshot sem.ProviderSnapshot, sessions []Session, sessionHealth ProviderHealth) (Report, error) {
 	if err := ValidatePlan(plan); err != nil {
 		return Report{}, err
 	}
@@ -221,6 +232,7 @@ func Analyze(plan Plan, snapshot sem.ProviderSnapshot) (Report, error) {
 		},
 		Team: plan.Team, Missions: append([]Mission(nil), plan.Missions...),
 		Warnings: snapshot.Header.Warnings, Failures: snapshot.Header.PartialFailures,
+		Sessions: filterMappedSessions(plan.Team, sessions), SessionHealth: sessionHealth,
 	}
 	resolved := make([]resolvedMission, 0, len(plan.Missions))
 	for _, mission := range plan.Missions {
@@ -253,6 +265,25 @@ func Analyze(plan Plan, snapshot sem.ProviderSnapshot) (Report, error) {
 		return left < right
 	})
 	return report, nil
+}
+
+func filterMappedSessions(team Team, sessions []Session) []Session {
+	allowed := make(map[string]bool)
+	for _, member := range team.Members {
+		for _, sessionID := range member.SessionIDs {
+			if sessionID != "" {
+				allowed[sessionID] = true
+			}
+		}
+	}
+	filtered := make([]Session, 0, len(allowed))
+	for _, session := range sessions {
+		if allowed[session.SessionID] {
+			filtered = append(filtered, session)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].SessionID < filtered[j].SessionID })
+	return filtered
 }
 
 func newGraphIndex(snapshot sem.ProviderSnapshot) graphIndex {

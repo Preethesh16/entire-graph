@@ -45,7 +45,12 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 	if err != nil {
 		return err
 	}
-	report, err := coordinate.Analyze(plan, snapshot)
+	sessions, sessionErr := coordinate.LoadEntireSessions(ctx, "entire")
+	sessionHealth := coordinate.ProviderHealth{Available: sessionErr == nil}
+	if sessionErr != nil {
+		sessionHealth.Detail = sessionErr.Error()
+	}
+	report, err := coordinate.AnalyzeWithSessions(plan, snapshot, sessions, sessionHealth)
 	if err != nil {
 		return err
 	}
@@ -132,6 +137,13 @@ func writeCoordinateText(out io.Writer, report coordinate.Report) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(out, "Decisions: %d BLOCK | %d REVIEW | %d CLEAR\n", report.Summary.Block, report.Summary.Review, report.Summary.Clear); err != nil {
+		return err
+	}
+	if report.SessionHealth.Available {
+		if _, err := fmt.Fprintf(out, "Entire sessions: %d visible\n", len(report.Sessions)); err != nil {
+			return err
+		}
+	} else if _, err := fmt.Fprintf(out, "Entire sessions: unavailable (%s)\n", report.SessionHealth.Detail); err != nil {
 		return err
 	}
 	for _, decision := range report.Decisions {

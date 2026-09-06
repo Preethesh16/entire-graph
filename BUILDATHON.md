@@ -81,6 +81,8 @@ The first backend slice is now available on the `progress` branch:
 - resolution of file and symbol targets against an Entire Graph full-profile snapshot;
 - same-symbol, same-file, direct dependency, and bounded two-hop decisions;
 - Graph evidence, confidence/resolution data, test targets, recommendations, and completeness caveats;
+- a read-only Entire session adapter that exposes bounded public activity metadata while intentionally omitting prompt text;
+- isolated session-provider health, so analysis remains available if Entire activity cannot be loaded;
 - additive `entire graph coordinate` text and JSON output;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
@@ -119,7 +121,7 @@ Checkpoint IDs and links will be added as they are created.
 
 ## Setup, run, and test instructions
 
-Implementation has not started at checkpoint 1. Commands will be documented with the first runnable slice. The upstream repository currently uses:
+The first runnable backend slice is implemented on `progress`. The repository verification surface remains:
 
 ```bash
 mise run build

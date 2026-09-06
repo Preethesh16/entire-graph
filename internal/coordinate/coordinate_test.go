@@ -119,6 +119,23 @@ func TestValidatePlanRejectsHardToInterpretInput(t *testing.T) {
 	}
 }
 
+func TestAnalyzeExposesOnlyExplicitlyMappedSessions(t *testing.T) {
+	plan := Plan{
+		SchemaVersion: PlanSchemaVersion,
+		Team:          Team{ID: "team", Name: "Team", Members: []Member{{ID: "owner", Name: "Owner", SessionIDs: []string{"allowed"}}}},
+	}
+	report, err := AnalyzeWithSessions(plan, testSnapshot(), []Session{
+		{SessionID: "other", Agent: "Claude", Status: "active"},
+		{SessionID: "allowed", Agent: "Codex", Status: "active"},
+	}, ProviderHealth{Available: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Sessions) != 1 || report.Sessions[0].SessionID != "allowed" {
+		t.Fatalf("sessions = %#v", report.Sessions)
+	}
+}
+
 func testSnapshot() sem.ProviderSnapshot {
 	return sem.ProviderSnapshot{
 		Header: sem.SnapshotHeader{SchemaVersion: "1.1", Provider: "entire-graph", ProviderVersion: "test", RepoRoot: "/repo", Profile: "full", Stats: sem.ProviderStats{CompletenessLevel: "complete"}},
