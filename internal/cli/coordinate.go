@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,11 +22,13 @@ import (
 const maxCoordinatePlanBytes = 1 << 20
 
 type coordinateFlags struct {
-	repo   string
-	plan   string
-	format string
-	head   bool
-	listen string
+	repo         string
+	plan         string
+	format       string
+	head         bool
+	listen       string
+	allowRemote  bool
+	networkState string
 }
 
 func runCoordinate(ctx context.Context, opts Options, args []string) error {
@@ -64,7 +67,7 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 		return err
 	}
 	if flags.listen != "" {
-		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth)
+		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth, flags.allowRemote, flags.networkState)
 	}
 	if flags.format == "json" {
 		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
@@ -102,9 +105,17 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 		case "--listen":
 			index++
 			if index >= len(args) {
-				return flags, errors.New("coordinate --listen requires a loopback address")
+				return flags, errors.New("coordinate --listen requires host:port")
 			}
 			flags.listen = args[index]
+		case "--allow-remote":
+			flags.allowRemote = true
+		case "--network-state":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --network-state requires a path")
+			}
+			flags.networkState = args[index]
 		default:
 			return flags, unexpectedArgumentsError("coordinate", "", []string{args[index]})
 		}
@@ -118,20 +129,27 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 	return flags, nil
 }
 
-func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) error {
+func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth, allowRemote bool, networkStatePath string) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
 	}
 	ip := net.ParseIP(host)
-	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return errors.New("coordinate --listen must bind to localhost or a loopback IP")
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) && !allowRemote {
+		return errors.New("coordinate --listen requires --allow-remote for a non-loopback address")
 	}
 	store, err := coordinate.NewPlanStore(planPath, plan)
 	if err != nil {
 		return err
 	}
-	handler := coordinateHandler(store, snapshot, sessions, health, checkpoints, checkpointHealth)
+	if networkStatePath == "" {
+		networkStatePath = filepath.Join(os.TempDir(), "spidey-sense-network-state.json")
+	}
+	network, err := coordinate.OpenNetworkStore(networkStatePath)
+	if err != nil {
+		return err
+	}
+	handler := coordinateHandler(store, snapshot, sessions, health, checkpoints, checkpointHealth, network)
 	server := &http.Server{
 		Addr: address, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
@@ -150,7 +168,7 @@ func serveCoordinate(ctx context.Context, opts Options, address, planPath string
 	return err
 }
 
-func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) http.Handler {
+func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth, network *coordinate.NetworkStore) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
 		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
@@ -169,6 +187,7 @@ func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapsho
 	mux.HandleFunc("GET /api/v1/sessions", func(out http.ResponseWriter, _ *http.Request) {
 		writeAPIJSON(out, http.StatusOK, map[string]any{"sessions": sessions, "health": health})
 	})
+	registerNetworkRoutes(mux, network)
 	mux.HandleFunc("PUT /api/v1/plan", func(out http.ResponseWriter, request *http.Request) {
 		request.Body = http.MaxBytesReader(out, request.Body, maxCoordinatePlanBytes)
 		decoder := json.NewDecoder(request.Body)
@@ -190,6 +209,139 @@ func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapsho
 		writeAPIJSON(out, http.StatusOK, updated)
 	})
 	return mux
+}
+
+func registerNetworkRoutes(mux *http.ServeMux, network *coordinate.NetworkStore) {
+	if network == nil {
+		return
+	}
+	mux.HandleFunc("POST /api/v1/teams", func(out http.ResponseWriter, request *http.Request) {
+		var input coordinate.CreateTeamRequest
+		if !decodeAPIRequest(out, request, &input) {
+			return
+		}
+		created, err := network.CreateTeam(input)
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		writeAPIJSON(out, http.StatusCreated, created)
+	})
+	mux.HandleFunc("POST /api/v1/teams/{id}/join", func(out http.ResponseWriter, request *http.Request) {
+		var input coordinate.JoinTeamRequest
+		if !decodeAPIRequest(out, request, &input) {
+			return
+		}
+		joined, err := network.JoinTeam(request.PathValue("id"), input)
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		writeAPIJSON(out, http.StatusCreated, joined)
+	})
+	mux.HandleFunc("POST /api/v1/agents/connect", func(out http.ResponseWriter, request *http.Request) {
+		var input coordinate.ConnectAgentRequest
+		if !decodeAPIRequest(out, request, &input) {
+			return
+		}
+		connected, err := network.ConnectAgent(bearerToken(request), input)
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		writeAPIJSON(out, http.StatusCreated, connected)
+	})
+	mux.HandleFunc("POST /api/v1/agents/{id}/heartbeat", func(out http.ResponseWriter, request *http.Request) {
+		var input coordinate.HeartbeatRequest
+		if !decodeAPIRequest(out, request, &input) {
+			return
+		}
+		agent, err := network.Heartbeat(request.PathValue("id"), bearerToken(request), input)
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, agent)
+	})
+	mux.HandleFunc("GET /api/v1/teams/{id}/agents", func(out http.ResponseWriter, request *http.Request) {
+		agents, err := network.Agents(request.PathValue("id"), bearerToken(request))
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, map[string]any{"agents": agents})
+	})
+	mux.HandleFunc("GET /api/v1/teams/{id}/events", func(out http.ResponseWriter, request *http.Request) {
+		events, cancel, err := network.Subscribe(request.PathValue("id"), bearerToken(request))
+		if err != nil {
+			writeNetworkError(out, err)
+			return
+		}
+		defer cancel()
+		flusher, ok := out.(http.Flusher)
+		if !ok {
+			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
+			return
+		}
+		// The server's ordinary write deadline protects finite API responses, but an
+		// authenticated event stream is intentionally long-lived.
+		_ = http.NewResponseController(out).SetWriteDeadline(time.Time{})
+		out.Header().Set("Content-Type", "text/event-stream")
+		out.Header().Set("Cache-Control", "no-store")
+		out.Header().Set("X-Content-Type-Options", "nosniff")
+		out.Header().Set("X-Accel-Buffering", "no")
+		fmt.Fprint(out, "event: ready\ndata: {}\n\n")
+		flusher.Flush()
+		for {
+			select {
+			case <-request.Context().Done():
+				return
+			case event, open := <-events:
+				if !open {
+					return
+				}
+				content, _ := json.Marshal(event)
+				fmt.Fprintf(out, "id: %d\nevent: %s\ndata: %s\n\n", event.ID, event.Type, content)
+				flusher.Flush()
+			}
+		}
+	})
+}
+
+func decodeAPIRequest(out http.ResponseWriter, request *http.Request, value any) bool {
+	request.Body = http.MaxBytesReader(out, request.Body, maxCoordinatePlanBytes)
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return false
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": "request must contain exactly one JSON value"})
+		return false
+	}
+	return true
+}
+
+func bearerToken(request *http.Request) string {
+	const prefix = "Bearer "
+	value := request.Header.Get("Authorization")
+	if !strings.HasPrefix(value, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(value, prefix))
+}
+
+func writeNetworkError(out http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	if errors.Is(err, coordinate.ErrUnauthorized) {
+		status = http.StatusUnauthorized
+	}
+	if errors.Is(err, coordinate.ErrTeamNotFound) || errors.Is(err, coordinate.ErrAgentNotFound) {
+		status = http.StatusNotFound
+	}
+	writeAPIJSON(out, status, map[string]string{"error": err.Error()})
 }
 
 func writeAPIJSON(out http.ResponseWriter, status int, value any) {

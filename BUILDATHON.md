@@ -33,7 +33,7 @@ The initial demonstrable workflow is deliberately narrow:
 
 1. A lead creates a dynamic team plan with any number of members and missions.
 2. Team members run Codex or Claude Code with Entire enabled in the repository.
-3. A local coordinator reads public Entire session metadata and observable Git state.
+3. A shared coordinator accepts bounded, authenticated heartbeats from connectors running in teammates' Entire-enabled clones.
 4. Mission targets and touched files are resolved against an Entire Graph snapshot.
 5. A deterministic risk engine detects exact overlap and bounded structural paths.
 6. The dashboard shows progress, evidence, and an actionable recommendation.
@@ -64,7 +64,7 @@ See `docs/spidey-sense-architecture.md` for the detailed design.
 ## Optional features after the stable core
 
 - richer Codex and Claude provider-specific metadata;
-- multi-machine synchronization;
+- production identity federation and internet-scale hosting operations;
 - GitHub pull-request and merge adapters;
 - audited messages to supported agents;
 - checkpoint-intent versus semantic-change drift;
@@ -84,9 +84,12 @@ The first backend slice is now available on the `progress` branch:
 - a read-only Entire session adapter that exposes bounded public activity metadata while intentionally omitting prompt text;
 - isolated session-provider health, so analysis remains available if Entire activity cannot be loaded;
 - additive `entire graph coordinate` text and JSON output;
-- a loopback-only `/api/v1/report` endpoint and Vite proxy feeding the dashboard from the same immutable decision report;
+- a safe-by-default `/api/v1/report` endpoint and Vite proxy, with explicit shared/LAN binding for teammate connectors;
 - revision-checked, atomic plan persistence through `/api/v1/plan`, plus privacy-bounded session discovery for onboarding;
 - privacy-filtered Entire checkpoint nodes, scoped only to session IDs explicitly connected to the team;
+- persisted team invites, manually entered member identity, token-scoped connector registration, bounded heartbeats, authenticated agent listing, and SSE events for genuine cross-machine coordination;
+- an `entire graph connect-agent` command that detects only allowlisted Entire/Git metadata and never transmits prompts, reasoning, terminal output, file contents, or secrets;
+- explicit `--allow-remote` LAN/deployment binding while retaining loopback as the safe default;
 - separate Team Setup, Plan & Assign, Spidey Tracker, and Agent Activity views so raw monitoring does not clutter the roadmap;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
@@ -116,6 +119,26 @@ npm run dev
 ```
 
 The development server proxies `/api` to the loopback backend. Synthetic dashboard data remains only as an explicit test/demo fixture; production `App.tsx` loads the real API and renders honest loading or provider-error states. The Git panel reports that its adapter is not connected instead of displaying fabricated activity.
+
+For a LAN-accessible shared coordinator, persist credentials outside the repository and bind explicitly:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . --plan examples/spidey-plan.json \
+  --listen 0.0.0.0:4317 --allow-remote \
+  --network-state /var/lib/spidey-sense/network.json
+```
+
+Create a team through `POST /api/v1/teams`, share only its returned invite code and team ID, then run this from each teammate clone:
+
+```bash
+entire graph connect-agent \
+  --server http://192.168.1.20:4317 --allow-insecure-http \
+  --team <team-id> --invite <invite-code> \
+  --name "Deepthi" --role "UI engineer" --mission connection-ui
+```
+
+Use HTTPS for a deployed server. Plain remote HTTP requires an explicit LAN-only opt-in.
 
 ## Entire Graph findings and verification
 
@@ -171,7 +194,7 @@ The abstract “codebase as a place” idea was also studied in Claude Clan. No 
 
 - Observe only public session metadata and repository activity; never private chain-of-thought.
 - Treat prompts, file paths, identities, repository URLs, and activity as sensitive.
-- Keep the initial service local and bind to loopback.
+- Keep loopback as the default; require explicit remote binding and HTTPS outside trusted LAN development.
 - Never expose arbitrary shell execution through the dashboard.
 - Keep any future agent action explicit, allowlisted, and auditable.
 - Never commit tokens, credentials, live activity files, or private session data.
@@ -184,7 +207,7 @@ The interface uses an original spider-inspired night-radar aesthetic: web zones,
 
 ## Known limitations and next steps
 
-- The first demo targets sessions visible to one local coordinator; cross-machine live synchronization is future work.
+- The connector currently uses long-running heartbeats and server-sent events; reconnect credential reuse and production account recovery are future hardening work.
 - Agent-to-human identity mapping remains explicit.
 - Static analysis is heuristic and may miss dynamic dispatch or runtime wiring.
 - `CLEAR` means no risk was found within the analyzed scope, not proof of independence.

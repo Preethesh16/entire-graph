@@ -32,9 +32,9 @@ The system may display public prompt summaries, statuses, timestamps, worktrees,
 
 Session telemetry alone cannot reliably identify the human owner or intended scope. The lead's plan remains an explicit source of intent. Observed session/Git activity can confirm or challenge that plan but does not silently overwrite it.
 
-### One local coordinator for the first demo
+### Shared coordinator with local-first metadata
 
-A local dashboard can reliably demonstrate multiple sessions visible in one environment. True cross-machine live coordination needs a shared authenticated transport and is deferred rather than faked.
+A loopback dashboard remains available for local development. Real team connectivity uses a shared deployed or explicitly LAN-bound coordinator plus a connector running in each teammate's Entire-enabled clone. The connector sends only allowlisted public metadata; it never sends prompts, reasoning, terminal output, file content, or secrets.
 
 ### Original visual identity
 
@@ -71,7 +71,7 @@ The general “codebase as a place” interaction pattern was studied in Claude 
 ## Deferred scope
 
 - production authentication and hosted collaboration;
-- multi-machine streaming;
+- production identity federation and internet-scale hosting operations;
 - direct messaging to every agent provider;
 - automatic merge/conflict resolution;
 - GitHub REST synchronization;

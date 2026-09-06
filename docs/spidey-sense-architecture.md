@@ -108,16 +108,30 @@ The initial Git adapter observes branch, HEAD, worktree status, worktrees, recen
 
 Git evidence supplements the declared plan and session data. It does not replace Graph relationships.
 
-### 6. Local API
+### 6. Shared-capable API
 
-The loopback service exposes a small, versioned surface:
+The service stays loopback-only by default, but can be explicitly bound to a reachable LAN address or deployed behind HTTPS. It exposes a small, versioned surface:
 
 - health and capability information;
 - aggregate dashboard snapshot;
 - validated mission-plan mutations;
 - explicit refresh/reanalysis.
+- team creation and invite-code joining;
+- token-scoped agent registration and bounded heartbeats;
+- authenticated team-agent snapshots and SSE events.
 
 Writes are bounded JSON requests. No endpoint accepts arbitrary commands. Errors are structured, and one unavailable provider cannot take down the aggregate response.
+
+Invite, admin, connector, and per-agent credentials are generated from cryptographic randomness and stored only as hashes. Names and roles come from explicit user input. The connector detects agent, model, session, branch, changed paths, checkpoint, and activity through bounded local commands, but its wire structs contain no prompt, reasoning, terminal, file-content, environment, or secret fields.
+
+The connectivity contract is:
+
+- `POST /api/v1/teams`
+- `POST /api/v1/teams/{id}/join`
+- `POST /api/v1/agents/connect`
+- `POST /api/v1/agents/{id}/heartbeat`
+- `GET /api/v1/teams/{id}/agents`
+- `GET /api/v1/teams/{id}/events` (SSE)
 
 ### 7. Dashboard
 
