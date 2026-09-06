@@ -54,8 +54,8 @@ export function Dashboard({ snapshot, loading = false, error }: DashboardProps) 
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#mission-control" aria-label="Spidey Sense mission control home">
-          <span className="brand-mark" aria-hidden="true"><i /></span>
-          <span><small>Graph intelligence</small>SPIDEY SENSE</span>
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+          <span><strong>spidey sense</strong><small>graph intelligence</small></span>
         </a>
         <div className="topbar-status">
           <span className="live-dot" aria-hidden="true" />
@@ -72,11 +72,16 @@ export function Dashboard({ snapshot, loading = false, error }: DashboardProps) 
             <h1 id="dashboard-title">Sense the collision<br /><em>before it lands.</em></h1>
             <p>{snapshot.team.objective}</p>
           </div>
-          <div className="signal-orbit" aria-hidden="true">
-            <span className="orbit orbit-one" />
-            <span className="orbit orbit-two" />
-            <span className="orbit-core"><i /></span>
-            <span className="orbit-alert" />
+          <div className="web-emblem" aria-hidden="true">
+            <svg viewBox="0 0 320 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <g className="web-lines">
+                <path d="M160 22V398M37 200H283M71 69L249 331M249 69L71 331" />
+                <path d="M160 22C157 70 130 93 91 70C118 100 108 143 64 160C111 158 130 179 124 215C116 250 94 286 71 331C112 301 143 313 160 352C177 313 208 301 249 331C226 286 204 250 196 215C190 179 209 158 256 160C212 143 202 100 229 70C190 93 163 70 160 22Z" />
+                <path d="M160 79C158 111 141 126 116 111C134 131 130 157 102 168C132 168 144 181 140 204C136 226 122 249 108 277C134 258 150 266 160 291C170 266 186 258 212 277C198 249 184 226 180 204C176 181 188 168 218 168C190 157 186 131 204 111C179 126 162 111 160 79Z" />
+              </g>
+              <circle className="web-node" cx="160" cy="200" r="5" />
+            </svg>
+            <span>signal network</span>
           </div>
         </section>
 
