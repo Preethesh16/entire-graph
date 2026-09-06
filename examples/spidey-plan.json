@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "revision": 0,
+  "team": {
+    "id": "buildathon-demo",
+    "name": "Buildathon Demo Team",
+    "call_sign": "Web Guard",
+    "objective": "Coordinate concurrent changes before they collide.",
+    "members": [
+      {
+        "id": "runner-cli",
+        "name": "CLI Runner",
+        "session_ids": []
+      },
+      {
+        "id": "runner-analysis",
+        "name": "Analysis Runner",
+        "session_ids": []
+      },
+      {
+        "id": "runner-docs",
+        "name": "Docs Runner",
+        "session_ids": []
+      }
+    ]
+  },
+  "missions": [
+    {
+      "id": "checkpoint-cli",
+      "title": "Extend checkpoint command",
+      "intent": "Change how checkpoint analysis is invoked",
+      "owner": "runner-cli",
+      "status": "active",
+      "targets": [
+        {
+          "file": "internal/cli/root.go",
+          "symbol": "runCheckpoint"
+        }
+      ]
+    },
+    {
+      "id": "checkpoint-analysis",
+      "title": "Change checkpoint analysis",
+      "intent": "Change how checkpoint commits are analyzed",
+      "owner": "runner-analysis",
+      "status": "active",
+      "targets": [
+        {
+          "file": "internal/sem/analyze.go",
+          "symbol": "AnalyzeCheckpoint"
+        }
+      ]
+    },
+    {
+      "id": "submission-docs",
+      "title": "Prepare submission documentation",
+      "intent": "Keep the Buildathon narrative current",
+      "owner": "runner-docs",
+      "status": "queued",
+      "targets": [
+        {
+          "file": "BUILDATHON.md"
+        }
+      ]
+    }
+  ]
+}

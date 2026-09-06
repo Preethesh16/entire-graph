@@ -357,6 +357,21 @@ var commandDocs = []commandDoc{
 		examples: []string{"entire graph checkpoint abc123 --json"},
 	},
 	{
+		name:    "coordinate",
+		group:   groupAnalyze,
+		summary: "Turn team missions and graph evidence into coordination decisions",
+		usage:   []string{"entire graph coordinate --plan <file.json> [--repo path] [--head] [--format text|json] [--listen 127.0.0.1:4317]"},
+		long:    "Loads a dynamic Spidey Sense team plan, resolves its file and symbol targets against a full Entire Graph snapshot, and reports deterministic BLOCK, REVIEW, or CLEAR decisions. Every risk includes the concrete graph path and source evidence that caused it. CLEAR is a bounded result, not proof that two changes are independent.",
+		flags: []flagDoc{
+			{name: "--plan", arg: "file.json", desc: "Versioned team and mission plan (required)"},
+			{name: "--repo", arg: "path", desc: "Repository to analyze (default: current repo)"},
+			{name: "--head", desc: "Analyze the committed tree instead of the working tree"},
+			{name: "--format", arg: "text|json", def: "text", desc: "Decision report format"},
+			{name: "--listen", arg: "host:port", desc: "Serve the report over a loopback-only HTTP API"},
+		},
+		examples: []string{"entire graph coordinate --repo . --plan spidey-plan.json --format text"},
+	},
+	{
 		name:    "verify",
 		group:   groupAnalyze,
 		summary: "Run a test command and return an adjudicated verdict, not test output",

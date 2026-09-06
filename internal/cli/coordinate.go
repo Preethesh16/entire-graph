@@ -1,0 +1,295 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/entireio/entire-graph/internal/coordinate"
+	"github.com/entireio/entire-graph/internal/sem"
+	"github.com/entireio/entire-graph/internal/termsafe"
+)
+
+const maxCoordinatePlanBytes = 1 << 20
+
+type coordinateFlags struct {
+	repo   string
+	plan   string
+	format string
+	head   bool
+	listen string
+}
+
+func runCoordinate(ctx context.Context, opts Options, args []string) error {
+	flags, err := parseCoordinateFlags(args)
+	if err != nil {
+		return err
+	}
+	repo, err := resolveRepo(ctx, opts.Env, flags.repo)
+	if err != nil {
+		return err
+	}
+	plan, err := readCoordinatePlan(flags.plan)
+	if err != nil {
+		return err
+	}
+	snapshot, err := sem.BuildProviderSnapshotWithOptions(ctx, repo, opts.Version, sem.ProviderSnapshotOptions{
+		NoNetwork: true,
+		Worktree:  !flags.head,
+		Profile:   sem.ProfileFull,
+	})
+	if err != nil {
+		return err
+	}
+	sessions, sessionErr := coordinate.LoadEntireSessions(ctx, "entire")
+	sessionHealth := coordinate.ProviderHealth{Available: sessionErr == nil}
+	if sessionErr != nil {
+		sessionHealth.Detail = sessionErr.Error()
+	}
+	checkpoints, checkpointErr := coordinate.LoadEntireCheckpoints(ctx, "entire")
+	checkpointHealth := coordinate.ProviderHealth{Available: checkpointErr == nil}
+	if checkpointErr != nil {
+		checkpointHealth.Detail = checkpointErr.Error()
+	}
+	report, err := coordinate.AnalyzeWithActivity(plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth)
+	if err != nil {
+		return err
+	}
+	if flags.listen != "" {
+		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth)
+	}
+	if flags.format == "json" {
+		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
+		encoder.SetEscapeHTML(false)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+	return writeCoordinateText(opts.Stdout, report)
+}
+
+func parseCoordinateFlags(args []string) (coordinateFlags, error) {
+	flags := coordinateFlags{format: "text"}
+	for index := 0; index < len(args); index++ {
+		switch args[index] {
+		case "--repo":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --repo requires a path")
+			}
+			flags.repo = args[index]
+		case "--plan":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --plan requires a JSON file")
+			}
+			flags.plan = args[index]
+		case "--format":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --format requires text or json")
+			}
+			flags.format = args[index]
+		case "--head":
+			flags.head = true
+		case "--listen":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --listen requires a loopback address")
+			}
+			flags.listen = args[index]
+		default:
+			return flags, unexpectedArgumentsError("coordinate", "", []string{args[index]})
+		}
+	}
+	if strings.TrimSpace(flags.plan) == "" {
+		return flags, errors.New("coordinate requires --plan <file>")
+	}
+	if flags.format != "text" && flags.format != "json" {
+		return flags, fmt.Errorf("coordinate --format must be text or json, got %q", flags.format)
+	}
+	return flags, nil
+}
+
+func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return errors.New("coordinate --listen must bind to localhost or a loopback IP")
+	}
+	store, err := coordinate.NewPlanStore(planPath, plan)
+	if err != nil {
+		return err
+	}
+	handler := coordinateHandler(store, snapshot, sessions, health, checkpoints, checkpointHealth)
+	server := &http.Server{
+		Addr: address, Handler: handler,
+		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	fmt.Fprintf(opts.Stderr, "Spidey Sense API listening on http://%s/api/v1/report\n", address)
+	err = server.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
+	})
+	mux.HandleFunc("GET /api/v1/report", func(out http.ResponseWriter, _ *http.Request) {
+		report, err := coordinate.AnalyzeWithActivity(store.Current(), snapshot, sessions, health, checkpoints, checkpointHealth)
+		if err != nil {
+			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, report)
+	})
+	mux.HandleFunc("GET /api/v1/plan", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, store.Current())
+	})
+	mux.HandleFunc("GET /api/v1/sessions", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, map[string]any{"sessions": sessions, "health": health})
+	})
+	mux.HandleFunc("PUT /api/v1/plan", func(out http.ResponseWriter, request *http.Request) {
+		request.Body = http.MaxBytesReader(out, request.Body, maxCoordinatePlanBytes)
+		decoder := json.NewDecoder(request.Body)
+		decoder.DisallowUnknownFields()
+		var next coordinate.Plan
+		if err := decoder.Decode(&next); err != nil {
+			writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		updated, err := store.Update(next)
+		if errors.Is(err, coordinate.ErrRevisionConflict) {
+			writeAPIJSON(out, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		if err != nil {
+			writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, updated)
+	})
+	return mux
+}
+
+func writeAPIJSON(out http.ResponseWriter, status int, value any) {
+	out.Header().Set("Content-Type", "application/json; charset=utf-8")
+	out.Header().Set("Cache-Control", "no-store")
+	out.Header().Set("X-Content-Type-Options", "nosniff")
+	out.WriteHeader(status)
+	_ = json.NewEncoder(out).Encode(value)
+}
+
+func readCoordinatePlan(path string) (coordinate.Plan, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return coordinate.Plan{}, fmt.Errorf("open coordinate plan: %w", err)
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, maxCoordinatePlanBytes+1))
+	if err != nil {
+		return coordinate.Plan{}, fmt.Errorf("read coordinate plan: %w", err)
+	}
+	if len(content) > maxCoordinatePlanBytes {
+		return coordinate.Plan{}, fmt.Errorf("coordinate plan exceeds %d bytes", maxCoordinatePlanBytes)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.DisallowUnknownFields()
+	var plan coordinate.Plan
+	if err := decoder.Decode(&plan); err != nil {
+		return coordinate.Plan{}, fmt.Errorf("decode coordinate plan: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return coordinate.Plan{}, errors.New("decode coordinate plan: multiple JSON values")
+		}
+		return coordinate.Plan{}, fmt.Errorf("decode coordinate plan: %w", err)
+	}
+	return plan, nil
+}
+
+func writeCoordinateText(out io.Writer, report coordinate.Report) error {
+	if _, err := fmt.Fprintf(out, "Spidey Sense: %s\n", report.Team.Name); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Graph: %s %s | profile=%s | completeness=%s\n", report.Graph.Provider, report.Graph.ProviderVersion, report.Graph.Profile, report.Graph.CompletenessLevel); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "Decisions: %d BLOCK | %d REVIEW | %d CLEAR\n", report.Summary.Block, report.Summary.Review, report.Summary.Clear); err != nil {
+		return err
+	}
+	if report.SessionHealth.Available {
+		if _, err := fmt.Fprintf(out, "Entire sessions: %d visible\n", len(report.Sessions)); err != nil {
+			return err
+		}
+	} else if _, err := fmt.Fprintf(out, "Entire sessions: unavailable (%s)\n", report.SessionHealth.Detail); err != nil {
+		return err
+	}
+	for _, decision := range report.Decisions {
+		if _, err := fmt.Fprintf(out, "\n[%s] %s <-> %s: %s\n", decision.Level, decision.MissionA, decision.MissionB, decision.Reason); err != nil {
+			return err
+		}
+		for _, step := range decision.Path {
+			location := ""
+			if step.From.File != "" {
+				location = step.From.File
+				if step.From.StartLine > 0 {
+					location += fmt.Sprintf(":%d", step.From.StartLine)
+				}
+			}
+			if _, err := fmt.Fprintf(out, "  %s --%s/%s--> %s", step.From.Name, step.Relation, step.Direction, step.To.Name); err != nil {
+				return err
+			}
+			if location != "" {
+				if _, err := fmt.Fprintf(out, " (%s)", location); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintln(out); err != nil {
+				return err
+			}
+		}
+		for _, recommendation := range decision.Recommendations {
+			if _, err := fmt.Fprintf(out, "  Action: %s\n", recommendation); err != nil {
+				return err
+			}
+		}
+		for _, target := range decision.TestTargets {
+			if _, err := fmt.Fprintf(out, "  Test: %s\n", target); err != nil {
+				return err
+			}
+		}
+		if decision.Caveat != "" {
+			if _, err := fmt.Fprintf(out, "  Caveat: %s\n", decision.Caveat); err != nil {
+				return err
+			}
+		}
+	}
+	for _, diagnostic := range report.Diagnostics {
+		if _, err := fmt.Fprintf(out, "\n[%s] mission=%s: %s\n", diagnostic.Code, diagnostic.MissionID, diagnostic.Detail); err != nil {
+			return err
+		}
+	}
+	return nil
+}

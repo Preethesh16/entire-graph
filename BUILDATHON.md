@@ -72,6 +72,51 @@ See `docs/spidey-sense-architecture.md` for the detailed design.
 - a larger 3D dependency world;
 - AI-written summaries grounded in the deterministic evidence.
 
+## Implementation progress
+
+The first backend slice is now available on the `progress` branch:
+
+- a versioned, dynamic team and mission-plan model;
+- validation for member ownership, mission status, targets, and repository-relative paths;
+- resolution of file and symbol targets against an Entire Graph full-profile snapshot;
+- same-symbol, same-file, direct dependency, and bounded two-hop decisions;
+- Graph evidence, confidence/resolution data, test targets, recommendations, and completeness caveats;
+- a read-only Entire session adapter that exposes bounded public activity metadata while intentionally omitting prompt text;
+- isolated session-provider health, so analysis remains available if Entire activity cannot be loaded;
+- additive `entire graph coordinate` text and JSON output;
+- a loopback-only `/api/v1/report` endpoint and Vite proxy feeding the dashboard from the same immutable decision report;
+- revision-checked, atomic plan persistence through `/api/v1/plan`, plus privacy-bounded session discovery for onboarding;
+- privacy-filtered Entire checkpoint nodes, scoped only to session IDs explicitly connected to the team;
+- separate Team Setup, Plan & Assign, Spidey Tracker, and Agent Activity views so raw monitoring does not clutter the roadmap;
+- a clearly labeled synthetic plan at `examples/spidey-plan.json`;
+- focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
+
+Run the current slice from source:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . \
+  --plan examples/spidey-plan.json \
+  --format text
+```
+
+Run the integrated dashboard in two terminals:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . \
+  --plan examples/spidey-plan.json \
+  --listen 127.0.0.1:4317
+```
+
+```bash
+cd web/spidey-sense
+npm ci
+npm run dev
+```
+
+The development server proxies `/api` to the loopback backend. Synthetic dashboard data remains only as an explicit test/demo fixture; production `App.tsx` loads the real API and renders honest loading or provider-error states. The Git panel reports that its adapter is not connected instead of displaying fabricated activity.
+
 ## Entire Graph findings and verification
 
 Initial Graph searches located the repository's safe extension surfaces:
@@ -97,7 +142,7 @@ Checkpoint IDs and links will be added as they are created.
 
 ## Setup, run, and test instructions
 
-Implementation has not started at checkpoint 1. Commands will be documented with the first runnable slice. The upstream repository currently uses:
+The first runnable backend slice is implemented on `progress`. The repository verification surface remains:
 
 ```bash
 mise run build

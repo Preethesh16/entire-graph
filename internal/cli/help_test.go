@@ -15,7 +15,7 @@ var dispatchCommands = []string{
 	"diff", "commit", "checkpoint", "analyze", "doctor", "capabilities",
 	"snapshot", "snapshot-query", "symbols", "edges", "search", "index", "def",
 	"explain", "neighbors", "impact", "verify", "stats", "agent-guide",
-	"init-agents", "version", "help",
+	"coordinate", "init-agents", "version", "help",
 }
 
 // TestUnknownFlagNamesTheVersion pins that a flag-shaped argument this binary does not know reads
