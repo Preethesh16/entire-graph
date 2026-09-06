@@ -144,7 +144,7 @@ Entire Graph identified the runtime evidence consumer in `internal/coordinate/co
 
 1. **Initial understanding and architecture:** this document, architecture, scope, prior-work disclosure, and Curveball seams.
 2. **Stable pre-Curveball implementation:** integrated dynamic team/session onboarding, revision-safe leader planning, Graph-backed coordination decisions, team-scoped checkpoints, loopback API, and tested React dashboard. Recorded by the checkpoint commit that marks this milestone.
-3. **Curveball response:** Track 2 evidence classification, partial-analysis fallback, verification paths, and fixtures; checkpoint pending final verification.
+3. **Curveball response:** Track 2 evidence classification, partial-analysis fallback, verification paths, and fixtures — commit `485d4a53`, Entire checkpoint `16ce4f58f28c`.
 4. **Final implementation and verification:** pending.
 
 Checkpoint IDs and links will be added as they are created.
