@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { toDashboardSnapshot } from './api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadSessions, toDashboardSnapshot } from './api';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('coordinate report adapter', () => {
   it('maps dynamic plan, sessions, and Graph evidence into dashboard data', () => {
@@ -23,5 +25,14 @@ describe('coordinate report adapter', () => {
     expect(snapshot.risks[0]).toMatchObject({ level: 'BLOCK', reviewTargets: ['one_test.go'] });
     expect(snapshot.risks[0].relations[0]).toMatchObject({ type: 'CALLS', resolution: 'resolved' });
     expect(snapshot.graph).toMatchObject({ nodeCount: 4, relationCount: 1, complete: true });
+  });
+
+  it('normalizes a provider failure with null sessions to an empty list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sessions: null, health: { available: false } }),
+    }));
+
+    await expect(loadSessions()).resolves.toMatchObject({ sessions: [] });
   });
 });

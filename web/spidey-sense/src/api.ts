@@ -136,8 +136,19 @@ async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const loadPlan = (signal?: AbortSignal) => apiJSON<CoordinatePlan>('/api/v1/plan', { signal });
-export const loadSessions = (signal?: AbortSignal) => apiJSON<{ sessions: PublicSession[] }>('/api/v1/sessions', { signal });
+export const loadPlan = async (signal?: AbortSignal) => {
+  const plan = await apiJSON<CoordinatePlan>('/api/v1/plan', { signal });
+  return {
+    ...plan,
+    team: { ...plan.team, members: plan.team.members ?? [] },
+    missions: plan.missions ?? [],
+  };
+};
+
+export const loadSessions = async (signal?: AbortSignal) => {
+  const payload = await apiJSON<{ sessions: PublicSession[] | null }>('/api/v1/sessions', { signal });
+  return { ...payload, sessions: payload.sessions ?? [] };
+};
 export const savePlan = (plan: CoordinatePlan) => apiJSON<CoordinatePlan>('/api/v1/plan', {
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan),
 });
