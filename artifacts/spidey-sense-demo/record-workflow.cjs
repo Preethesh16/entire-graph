@@ -7,8 +7,8 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 
 async function recordedContext(browser) {
   return browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    recordVideo: { dir: output, size: { width: 1440, height: 900 } },
+    viewport: { width: 1600, height: 900 },
+    recordVideo: { dir: output, size: { width: 1600, height: 900 } },
     colorScheme: 'dark',
     reducedMotion: 'no-preference',
   });
@@ -75,16 +75,17 @@ async function finish(page, context, name) {
   await owner.selectOption(teammateSession.memberId);
   await sleep(6500);
   await tourPage.getByRole('button', { name: '3. Graph space' }).click();
-  await sleep(12000);
+  await sleep(4000);
+  await tourPage.locator('.graph-experience').scrollIntoViewIfNeeded();
+  await sleep(11000);
+  await tourPage.locator('.scene-node').first().click();
+  await sleep(5500);
   await tourPage.getByRole('button', { name: 'Refresh evidence' }).click();
   await tourPage.waitForFunction(() => {
     const button = [...document.querySelectorAll('button')].find((element) => element.textContent?.includes('Refresh evidence'));
     return button && !button.disabled;
   }, undefined, { timeout: 30000 });
-  await sleep(9000);
-  const graphNodes = tourPage.locator('.graph-node button, [data-graph-node]');
-  if (await graphNodes.count()) await graphNodes.first().click().catch(() => {});
-  await sleep(7000);
+  await sleep(8500);
   await tourPage.getByRole('button', { name: 'Live activity' }).click();
   await sleep(8000);
   clearInterval(keepAlive);

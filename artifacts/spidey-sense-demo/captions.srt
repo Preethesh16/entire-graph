@@ -1,35 +1,35 @@
 1
-00:00:00,000 --> 00:00:07,500
+00:00:00,000 --> 00:00:07,000
 Meet Spidey Sense: production coordination for engineering teams using coding agents and Entire Graph.
 
 2
-00:00:07,500 --> 00:00:21,500
+00:00:07,000 --> 00:00:18,000
 The lead creates a secure browser room, enters their own identity, and receives a private invite link.
 
 3
-00:00:21,500 --> 00:00:36,500
+00:00:18,000 --> 00:00:31,000
 A teammate joins entirely through the website. Prompts, reasoning, terminal contents, file contents, and secrets are never transmitted.
 
 4
-00:00:36,500 --> 00:00:46,500
+00:00:31,000 --> 00:00:41,000
 The authenticated roster updates live, and teammates become assignable through stable member identifiers.
 
 5
-00:00:46,500 --> 00:00:58,500
+00:00:41,000 --> 00:00:52,000
 The plan captures mission outcome, owner, status, target file, and optional source symbol.
 
 6
-00:00:58,500 --> 00:01:14,500
+00:00:52,000 --> 00:01:07,000
 Graph Space separates confirmed structural relationships from heuristic or incomplete evidence.
 
 7
-00:01:14,500 --> 00:01:25,500
+00:01:07,000 --> 00:01:17,000
 Partial analysis remains visible, with explicit source inspection and focused test verification paths.
 
 8
-00:01:25,500 --> 00:01:33,500
+00:01:17,000 --> 00:01:26,000
 Refresh Evidence rebuilds the real, local, no-egress HardCoders graph as the repository changes.
 
 9
-00:01:33,500 --> 00:01:36,000
+00:01:26,000 --> 00:01:30,500
 Spidey Sense turns evidence, intent, and live presence into one truthful engineering workflow.
