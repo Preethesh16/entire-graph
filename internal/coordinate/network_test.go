@@ -26,15 +26,19 @@ func TestNetworkStoreCrossMachineLifecyclePersistsHashedCredentials(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	connected, err := store.ConnectAgent(joined.ConnectorToken, ConnectAgentRequest{TeamID: created.TeamID, MemberID: joined.MemberID, SessionID: "session-remote", AgentType: "Codex", Provider: "Entire", Model: "gpt-test"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	events, cancel, err := store.Subscribe(created.TeamID, created.AdminToken)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cancel()
+	connected, err := store.ConnectAgent(joined.ConnectorToken, ConnectAgentRequest{TeamID: created.TeamID, MemberID: joined.MemberID, SessionID: "session-remote", AgentType: "Codex", Provider: "Entire", Model: "gpt-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectedEvent := <-events
+	if connectedEvent.Type != "agent.connected" || strings.Contains(string(connectedEvent.Data), "token_hash") || strings.Contains(string(connectedEvent.Data), connected.AgentToken) {
+		t.Fatalf("unsafe connected event = %s", connectedEvent.Data)
+	}
 	agent, err := store.Heartbeat(connected.AgentID, connected.AgentToken, HeartbeatRequest{MissionID: "connection-ui", Branch: "feature/ui", ChangedFiles: []string{"web/spidey-sense/src/App.tsx"}, CheckpointID: "abc123", Blocker: "waiting for API", LastActivity: "2026-09-06T12:00:00Z"})
 	if err != nil {
 		t.Fatal(err)

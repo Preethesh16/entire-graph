@@ -299,7 +299,7 @@ func (store *NetworkStore) ConnectAgent(token string, request ConnectAgentReques
 		delete(team.Agents, agentID)
 		return AgentCredentials{}, err
 	}
-	store.publishLocked(request.TeamID, "agent.connected", agentID, team.Agents[agentID])
+	store.publishLocked(request.TeamID, "agent.connected", agentID, store.publicAgentLocked(team, team.Agents[agentID]))
 	return AgentCredentials{AgentID: agentID, AgentToken: agentToken}, nil
 }
 
