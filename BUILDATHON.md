@@ -134,7 +134,7 @@ Not announced yet. The pre-Curveball architecture isolates inputs, policy, and p
 ## Checkpoint links and what each checkpoint proves
 
 1. **Initial understanding and architecture:** this document, architecture, scope, prior-work disclosure, and Curveball seams.
-2. **Stable pre-Curveball implementation:** pending.
+2. **Stable pre-Curveball implementation:** integrated dynamic team/session onboarding, revision-safe leader planning, Graph-backed coordination decisions, team-scoped checkpoints, loopback API, and tested React dashboard. Recorded by the checkpoint commit that marks this milestone.
 3. **Curveball response:** pending.
 4. **Final implementation and verification:** pending.
 
