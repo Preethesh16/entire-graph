@@ -19,6 +19,21 @@
   --violet: #9a7dff;
 }
 
+.workflow-nav { position: sticky; top: 0; z-index: 20; display: flex; gap: .5rem; padding: .75rem clamp(1rem, 4vw, 4rem); background: rgba(7, 9, 18, .94); border-bottom: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(14px); }
+.workflow-nav button { border: 0; border-radius: 999px; padding: .7rem 1rem; color: #aeb5c8; background: transparent; cursor: pointer; }
+.workflow-nav button.active { color: white; background: rgba(255,57,93,.18); box-shadow: inset 0 0 0 1px rgba(255,57,93,.45); }
+.focused-page { width: min(980px, calc(100% - 2rem)); margin: 0 auto; padding: 4rem 0; }
+.focused-page header { max-width: 680px; margin-bottom: 2rem; }
+.focused-page h1 { margin: .35rem 0; font-size: clamp(2rem, 5vw, 4rem); }
+.focused-page header p:last-child { color: #aeb5c8; line-height: 1.7; }
+.editor-list { display: grid; gap: .75rem; }
+.editor-list article { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.3fr) minmax(180px, 1fr); gap: .75rem; align-items: center; padding: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.035); }
+.editor-list input, .editor-list select { width: 100%; color: white; background: #101522; border: 1px solid rgba(255,255,255,.16); border-radius: 9px; padding: .75rem; }
+.editor-actions { display: flex; justify-content: space-between; margin-top: 1rem; }
+.editor-actions button { border: 1px solid rgba(255,255,255,.18); border-radius: 9px; padding: .75rem 1rem; color: white; background: #141a28; cursor: pointer; }
+.editor-actions .primary-action { border-color: #ff395d; background: #d9284a; }
+@media (max-width: 720px) { .workflow-nav { overflow-x: auto; } .workflow-nav button { white-space: nowrap; } .editor-list article { grid-template-columns: 1fr; } }
+
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }

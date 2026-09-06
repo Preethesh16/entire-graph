@@ -59,7 +59,7 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 		return err
 	}
 	if flags.listen != "" {
-		return serveCoordinate(ctx, opts, flags.listen, report)
+		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth)
 	}
 	if flags.format == "json" {
 		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
@@ -113,7 +113,7 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 	return flags, nil
 }
 
-func serveCoordinate(ctx context.Context, opts Options, address string, report coordinate.Report) error {
+func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
@@ -122,7 +122,11 @@ func serveCoordinate(ctx context.Context, opts Options, address string, report c
 	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		return errors.New("coordinate --listen must bind to localhost or a loopback IP")
 	}
-	handler := coordinateHandler(report)
+	store, err := coordinate.NewPlanStore(planPath, plan)
+	if err != nil {
+		return err
+	}
+	handler := coordinateHandler(store, snapshot, sessions, health)
 	server := &http.Server{
 		Addr: address, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
@@ -141,13 +145,44 @@ func serveCoordinate(ctx context.Context, opts Options, address string, report c
 	return err
 }
 
-func coordinateHandler(report coordinate.Report) http.Handler {
+func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
 		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
 	})
 	mux.HandleFunc("GET /api/v1/report", func(out http.ResponseWriter, _ *http.Request) {
+		report, err := coordinate.AnalyzeWithSessions(store.Current(), snapshot, sessions, health)
+		if err != nil {
+			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		writeAPIJSON(out, http.StatusOK, report)
+	})
+	mux.HandleFunc("GET /api/v1/plan", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, store.Current())
+	})
+	mux.HandleFunc("GET /api/v1/sessions", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, map[string]any{"sessions": sessions, "health": health})
+	})
+	mux.HandleFunc("PUT /api/v1/plan", func(out http.ResponseWriter, request *http.Request) {
+		request.Body = http.MaxBytesReader(out, request.Body, maxCoordinatePlanBytes)
+		decoder := json.NewDecoder(request.Body)
+		decoder.DisallowUnknownFields()
+		var next coordinate.Plan
+		if err := decoder.Decode(&next); err != nil {
+			writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		updated, err := store.Update(next)
+		if errors.Is(err, coordinate.ErrRevisionConflict) {
+			writeAPIJSON(out, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		if err != nil {
+			writeAPIJSON(out, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, updated)
 	})
 	return mux
 }

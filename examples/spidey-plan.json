@@ -1,5 +1,6 @@
 {
   "schema_version": "1.0",
+  "revision": 0,
   "team": {
     "id": "buildathon-demo",
     "name": "Buildathon Demo Team",

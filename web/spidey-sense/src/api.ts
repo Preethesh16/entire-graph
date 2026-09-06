@@ -1,5 +1,14 @@
 import type { DashboardSnapshot, EvidenceNode, EvidenceRelation, RiskSignal } from './domain';
 
+export interface CoordinatePlan {
+  schema_version: string;
+  revision: number;
+  team: CoordinateReport['team'];
+  missions: CoordinateReport['missions'];
+}
+
+export interface PublicSession { session_id: string; agent: string; model?: string; status: string; worktree?: string }
+
 interface CoordinateReport {
   schema_version: string;
   graph: {
@@ -116,3 +125,15 @@ export async function loadDashboard(signal?: AbortSignal): Promise<DashboardSnap
   if (!response.ok) throw new Error(`Mission API returned ${response.status}`);
   return toDashboardSnapshot(await response.json() as CoordinateReport);
 }
+
+async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, { ...init, headers: { Accept: 'application/json', ...init?.headers } });
+  if (!response.ok) throw new Error(`Mission API returned ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+export const loadPlan = (signal?: AbortSignal) => apiJSON<CoordinatePlan>('/api/v1/plan', { signal });
+export const loadSessions = (signal?: AbortSignal) => apiJSON<{ sessions: PublicSession[] }>('/api/v1/sessions', { signal });
+export const savePlan = (plan: CoordinatePlan) => apiJSON<CoordinatePlan>('/api/v1/plan', {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan),
+});

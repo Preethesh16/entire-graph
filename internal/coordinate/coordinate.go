@@ -19,6 +19,7 @@ const (
 
 type Plan struct {
 	SchemaVersion string    `json:"schema_version"`
+	Revision      int       `json:"revision"`
 	Team          Team      `json:"team"`
 	Missions      []Mission `json:"missions"`
 }
@@ -148,6 +149,9 @@ var allowedStatuses = map[string]bool{
 func ValidatePlan(plan Plan) error {
 	if plan.SchemaVersion != PlanSchemaVersion {
 		return fmt.Errorf("plan schema_version must be %q", PlanSchemaVersion)
+	}
+	if plan.Revision < 0 {
+		return errors.New("plan revision cannot be negative")
 	}
 	if strings.TrimSpace(plan.Team.ID) == "" || strings.TrimSpace(plan.Team.Name) == "" {
 		return errors.New("team id and name are required")

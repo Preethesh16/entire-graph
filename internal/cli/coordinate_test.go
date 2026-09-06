@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/entireio/entire-graph/internal/coordinate"
+	"github.com/entireio/entire-graph/internal/sem"
 )
 
 func TestCoordinateCommandReportsDynamicSameFileCollision(t *testing.T) {
@@ -50,7 +51,12 @@ func TestCoordinateCommandReportsDynamicSameFileCollision(t *testing.T) {
 }
 
 func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
-	handler := coordinateHandler(coordinate.Report{SchemaVersion: coordinate.ReportSchemaVersion})
+	plan := coordinate.Plan{SchemaVersion: coordinate.PlanSchemaVersion, Team: coordinate.Team{ID: "team", Name: "Team"}}
+	store, err := coordinate.NewPlanStore(filepath.Join(t.TempDir(), "plan.json"), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := coordinateHandler(store, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/report", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -63,7 +69,7 @@ func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
 }
 
 func TestCoordinateListenRejectsNonLoopback(t *testing.T) {
-	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", coordinate.Report{})
+	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", "plan.json", coordinate.Plan{}, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{})
 	if err == nil || !strings.Contains(err.Error(), "loopback") {
 		t.Fatalf("error = %v", err)
 	}
