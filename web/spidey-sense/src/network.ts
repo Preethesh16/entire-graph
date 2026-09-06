@@ -52,6 +52,8 @@ export interface BrowserTeamSession {
 
 export interface PresenceInput { missionId?: string; blocker?: string }
 
+export interface TeamInvite { teamId: string; inviteCode: string }
+
 const storageKey = 'spidey-sense.browser-team.v1';
 
 async function requestJSON<T>(path: string, init: RequestInit): Promise<T> {
@@ -136,6 +138,22 @@ export function restoreBrowserTeam(): BrowserTeamSession | undefined {
 
 export function leaveBrowserTeam(): void { sessionStorage.removeItem(storageKey); }
 
+type URLLocation = Pick<Location, 'href' | 'hash'>;
+
+export function createInviteURL(invite: TeamInvite, location: URLLocation = window.location): string {
+  const url = new URL(location.href);
+  url.hash = `join?${new URLSearchParams({ team: invite.teamId, invite: invite.inviteCode })}`;
+  return url.toString();
+}
+
+export function readInviteURL(location: URLLocation = window.location): TeamInvite | undefined {
+  if (!location.hash.startsWith('#join?')) return undefined;
+  const params = new URLSearchParams(location.hash.slice('#join?'.length));
+  const teamId = params.get('team')?.trim();
+  const inviteCode = params.get('invite')?.trim();
+  return teamId && inviteCode ? { teamId, inviteCode } : undefined;
+}
+
 export async function sendBrowserHeartbeat(session: BrowserTeamSession, presence: PresenceInput = {}): Promise<ConnectedAgent> {
   return requestJSON<ConnectedAgent>(`/api/v1/agents/${encodeURIComponent(session.agentId)}/heartbeat`, {
     method: 'POST',
@@ -153,7 +171,16 @@ export async function loadTeamAgents(session: BrowserTeamSession, signal?: Abort
   return result.agents;
 }
 
-export async function watchTeamEvents(session: BrowserTeamSession, signal: AbortSignal, onEvent: () => void): Promise<void> {
+const reconnectDelay = (attempt: number) => Math.min(15_000, 750 * 2 ** attempt);
+
+async function waitForReconnect(milliseconds: number, signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+    signal.addEventListener('abort', () => { window.clearTimeout(timer); resolve(); }, { once: true });
+  });
+}
+
+async function consumeTeamEvents(session: BrowserTeamSession, signal: AbortSignal, onEvent: () => void): Promise<void> {
   const response = await fetch(`/api/v1/teams/${encodeURIComponent(session.teamId)}/events`, {
     signal, headers: { Accept: 'text/event-stream', Authorization: `Bearer ${session.viewerToken}` },
   });
@@ -162,7 +189,7 @@ export async function watchTeamEvents(session: BrowserTeamSession, signal: Abort
   let buffered = '';
   while (!signal.aborted) {
     const { done, value } = await reader.read();
-    if (done) return;
+    if (done) throw new Error('Live team stream ended');
     buffered += value;
     let boundary = buffered.indexOf('\n\n');
     while (boundary >= 0) {
@@ -170,6 +197,22 @@ export async function watchTeamEvents(session: BrowserTeamSession, signal: Abort
       buffered = buffered.slice(boundary + 2);
       if (/^event: agent\./m.test(event)) onEvent();
       boundary = buffered.indexOf('\n\n');
+    }
+  }
+}
+
+export async function watchTeamEvents(session: BrowserTeamSession, signal: AbortSignal, onEvent: () => void): Promise<void> {
+  let attempt = 0;
+  while (!signal.aborted) {
+    try {
+      await consumeTeamEvents(session, signal, onEvent);
+      attempt = 0;
+    } catch (reason) {
+      if (signal.aborted) return;
+      await waitForReconnect(reconnectDelay(attempt), signal);
+      attempt = Math.min(attempt + 1, 5);
+      if (signal.aborted) return;
+      if (reason instanceof TypeError) continue;
     }
   }
 }

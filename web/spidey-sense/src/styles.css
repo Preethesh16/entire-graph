@@ -36,12 +36,20 @@
 .editor-list article > strong { font-weight: 400; }
 .editor-list article > span, .editor-list article > small { color: var(--muted); }
 .editor-list article > code { color: #aeb3b0; overflow-wrap: anywhere; }
+.assignment-summary { display: flex; flex-wrap: wrap; gap: .55rem; margin: 1.4rem 0 1rem; }
+.assignment-summary span { padding: .48rem .7rem; border: 1px solid rgba(255,255,255,.12); color: #aeb6b2; background: #080a09; font: .58rem 'Cascadia Code', monospace; letter-spacing: .06em; text-transform: uppercase; }
+.mission-editor article { grid-template-columns: minmax(240px,1.35fr) minmax(180px,.75fr) minmax(220px,1fr) auto; }
+.mission-editor-main, .mission-editor-assignment, .mission-editor-target { display: grid; gap: .55rem; }
+.remove-mission { align-self: stretch; border: 1px solid rgba(255,103,125,.2); color: #d8909c; background: transparent; padding: 0 .8rem; cursor: pointer; }
+.remove-mission:hover { border-color: rgba(255,103,125,.55); background: rgba(255,103,125,.05); }
+.workflow-nav .refresh-evidence { margin-left: auto; color: #8ad8b4; border-left: 1px solid rgba(138,216,180,.22); }
 .editor-actions { display: flex; justify-content: space-between; margin-top: 1.2rem; }
 .editor-actions button { border: 1px solid rgba(255,255,255,.2); border-radius: 0; padding: .85rem 1.2rem; color: #e6e6e1; background: transparent; cursor: pointer; font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
 .editor-actions button:hover:not(:disabled) { border-color: rgba(255,255,255,.58); background: rgba(255,255,255,.04); }
 .editor-actions button:disabled { cursor: not-allowed; opacity: .38; }
 .editor-actions .primary-action { border-color: rgba(255,75,85,.72); color: #fff; background: rgba(255,75,85,.15); }
-@media (max-width: 720px) { .workflow-nav { overflow-x: auto; } .workflow-nav button { white-space: nowrap; } .editor-list article { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .mission-editor article { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .workflow-nav { overflow-x: auto; } .workflow-nav button { white-space: nowrap; } .editor-list article, .mission-editor article { grid-template-columns: 1fr; } .remove-mission { min-height: 42px; } }
 
 * { box-sizing: border-box; }
 

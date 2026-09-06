@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBrowserTeam, joinBrowserTeam, loadTeamAgents, restoreBrowserTeam } from './network';
+import { createBrowserTeam, createInviteURL, joinBrowserTeam, loadTeamAgents, readInviteURL, restoreBrowserTeam } from './network';
 
 const jsonResponse = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -33,5 +33,18 @@ describe('browser team connectivity', () => {
 
     expect(agents[0]).toMatchObject({ name: 'Deepthi', online: true });
     expect(fetchMock.mock.calls[2][1]?.headers).toMatchObject({ Authorization: 'Bearer viewer-2' });
+  });
+
+  it('shares join credentials in the browser fragment instead of the request URL', () => {
+    const url = createInviteURL(
+      { teamId: 'team-a/b', inviteCode: 'invite secret' },
+      new URL('https://signal.example/room?surface=graph'),
+    );
+    const parsed = new URL(url);
+
+    expect(parsed.pathname).toBe('/room');
+    expect(parsed.search).toBe('?surface=graph');
+    expect(parsed.hash).toContain('#join?');
+    expect(readInviteURL(parsed)).toEqual({ teamId: 'team-a/b', inviteCode: 'invite secret' });
   });
 });

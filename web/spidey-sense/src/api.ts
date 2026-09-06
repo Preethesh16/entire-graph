@@ -150,6 +150,12 @@ export async function loadDashboard(signal?: AbortSignal): Promise<DashboardSnap
   return toDashboardSnapshot(await response.json() as CoordinateReport);
 }
 
+export async function refreshDashboard(): Promise<DashboardSnapshot> {
+  const response = await fetch('/api/v1/refresh', { method: 'POST', headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Graph refresh returned ${response.status}`);
+  return toDashboardSnapshot(await response.json() as CoordinateReport);
+}
+
 async function apiJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { Accept: 'application/json', ...init?.headers } });
   if (!response.ok) throw new Error(`Mission API returned ${response.status}`);

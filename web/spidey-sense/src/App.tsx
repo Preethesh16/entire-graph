@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadDashboard, loadPlan, loadSessions, savePlan, type CoordinatePlan, type PublicSession } from './api';
+import { loadDashboard, loadPlan, loadSessions, refreshDashboard, savePlan, type CoordinatePlan, type PublicSession } from './api';
 import { Dashboard } from './components/Dashboard';
 import { Workflow } from './components/Workflow';
 import { createBrowserTeam, joinBrowserTeam, leaveBrowserTeam, loadTeamAgents, restoreBrowserTeam, sendBrowserHeartbeat, watchTeamEvents, type BrowserTeamSession, type ConnectedAgent, type PresenceInput } from './network';
@@ -62,11 +62,11 @@ export default function App() {
   const connectedSnapshot = useMemo(() => {
     if (!snapshot || liveAgents.length === 0) return snapshot;
     const runners = snapshot.runners.map((runner) => {
-      const agent = liveAgents.find((candidate) => candidate.name.toLowerCase() === runner.displayName.toLowerCase());
+      const agent = liveAgents.find((candidate) => candidate.member_id === runner.id || candidate.name.toLowerCase() === runner.displayName.toLowerCase());
       return agent ? { ...runner, status: agent.online ? 'active' as const : 'offline' as const, provider: `${agent.agent} · ${agent.provider}`, currentMissionId: agent.mission_id || runner.currentMissionId } : runner;
     });
     for (const [index, agent] of liveAgents.entries()) {
-      if (runners.some((runner) => runner.displayName.toLowerCase() === agent.name.toLowerCase())) continue;
+      if (runners.some((runner) => runner.id === agent.member_id || runner.displayName.toLowerCase() === agent.name.toLowerCase())) continue;
       runners.push({
         id: agent.member_id, displayName: agent.name, role: agent.role || 'Team member', archetype: 'Browser presence',
         accent: ['#a9d6ff', '#f4be7c', '#c9b6ff', '#78e2ba'][index % 4], initials: agent.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
@@ -81,9 +81,14 @@ export default function App() {
     snapshot={connectedSnapshot ?? snapshot} plan={plan} sessions={sessions} browserSession={browserSession} liveAgents={liveAgents}
     connectionBusy={connectionBusy} connectionError={connectionError} presence={presence}
     onCreateTeam={(input) => runConnection(() => createBrowserTeam(input))}
-    onJoinTeam={(input) => runConnection(() => joinBrowserTeam(input))}
+    onJoinTeam={(input) => runConnection(async () => {
+      const connected = await joinBrowserTeam(input);
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+      return connected;
+    })}
     onPresence={async (next) => { setPresence(next); if (browserSession) { setConnectionBusy(true); setConnectionError(undefined); try { await sendBrowserHeartbeat(browserSession, next); await refreshAgents(browserSession); } catch (reason) { setConnectionError(reason instanceof Error ? reason.message : 'Presence update failed'); } finally { setConnectionBusy(false); } } }}
     onLeaveTeam={() => { leaveBrowserTeam(); setBrowserSession(undefined); setLiveAgents([]); setConnectionError(undefined); }}
+    onRefresh={async () => { setSnapshot(await refreshDashboard()); setSessions((await loadSessions()).sessions); }}
     onSave={async (next) => { const saved = await savePlan(next); setPlan(saved); setSnapshot(await loadDashboard()); }}
   />;
 }

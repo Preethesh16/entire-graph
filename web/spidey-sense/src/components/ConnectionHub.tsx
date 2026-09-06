@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import type { BrowserTeamSession, ConnectedAgent, PresenceInput } from '../network';
+import { createInviteURL, readInviteURL, type BrowserTeamSession, type ConnectedAgent, type PresenceInput } from '../network';
 import type { Mission } from '../domain';
 import { StatusPill } from './StatusPill';
 
@@ -17,11 +17,12 @@ interface ConnectionHubProps {
 }
 
 export function ConnectionHub({ session, agents, missions, presence, error, busy, onCreate, onJoin, onPresence, onLeave }: ConnectionHubProps) {
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const sharedInvite = readInviteURL();
+  const [mode, setMode] = useState<'create' | 'join'>(sharedInvite ? 'join' : 'create');
   const [teamName, setTeamName] = useState('HardCoders Graph Room');
   const [objective, setObjective] = useState('Coordinate changes across the Anchor platform with verifiable Graph evidence.');
-  const [teamId, setTeamId] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [teamId, setTeamId] = useState(sharedInvite?.teamId ?? '');
+  const [inviteCode, setInviteCode] = useState(sharedInvite?.inviteCode ?? '');
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
   const [copied, setCopied] = useState(false);
@@ -73,7 +74,7 @@ export function ConnectionHub({ session, agents, missions, presence, error, busy
   const copyInvite = async () => {
     if (!session.inviteCode) return;
     try {
-      await navigator.clipboard.writeText(`${session.teamId}\n${session.inviteCode}`);
+      await navigator.clipboard.writeText(createInviteURL({ teamId: session.teamId, inviteCode: session.inviteCode }));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch { setCopied(false); }
@@ -86,8 +87,8 @@ export function ConnectionHub({ session, agents, missions, presence, error, busy
         <button className="quiet-action" onClick={onLeave}>Leave this browser session</button>
       </header>
       {session.inviteCode ? <section className="invite-vault">
-        <div><p className="eyebrow">Invite credentials</p><h2>Bring your team onto the web</h2><p>Share these two values privately. The admin credential remains isolated in this browser tab.</p></div>
-        <div className="invite-values"><code>{session.teamId}</code><code>{session.inviteCode}</code><button onClick={copyInvite}>{copied ? 'Copied' : 'Copy invite'}</button></div>
+        <div><p className="eyebrow">Invite link</p><h2>Bring your team onto the web</h2><p>Share this link privately. Credentials stay in the browser fragment, so they are not sent in the page request. The admin credential remains isolated in this tab.</p></div>
+        <div className="invite-values"><code>{session.teamId}</code><code>{session.inviteCode}</code><button onClick={copyInvite}>{copied ? 'Link copied' : 'Copy private link'}</button></div>
       </section> : null}
       <section className="presence-editor">
         <div><p className="eyebrow">Your broadcast</p><h2>Current focus</h2></div>

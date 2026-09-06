@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/entireio/entire-graph/internal/coordinate"
@@ -29,6 +30,40 @@ type coordinateFlags struct {
 	listen       string
 	allowRemote  bool
 	networkState string
+}
+
+type coordinateData struct {
+	snapshot         sem.ProviderSnapshot
+	sessions         []coordinate.Session
+	sessionHealth    coordinate.ProviderHealth
+	checkpoints      []coordinate.Checkpoint
+	checkpointHealth coordinate.ProviderHealth
+}
+
+type coordinateRuntime struct {
+	mu      sync.RWMutex
+	data    coordinateData
+	refresh func(context.Context) (coordinateData, error)
+}
+
+func (runtime *coordinateRuntime) current() coordinateData {
+	runtime.mu.RLock()
+	defer runtime.mu.RUnlock()
+	return runtime.data
+}
+
+func (runtime *coordinateRuntime) reload(ctx context.Context) (coordinateData, error) {
+	if runtime.refresh == nil {
+		return coordinateData{}, errors.New("repository refresh is unavailable")
+	}
+	next, err := runtime.refresh(ctx)
+	if err != nil {
+		return coordinateData{}, err
+	}
+	runtime.mu.Lock()
+	runtime.data = next
+	runtime.mu.Unlock()
+	return next, nil
 }
 
 func runCoordinate(ctx context.Context, opts Options, args []string) error {
@@ -67,7 +102,7 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 		return err
 	}
 	if flags.listen != "" {
-		return serveCoordinate(ctx, opts, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth, flags.allowRemote, flags.networkState)
+		return serveCoordinate(ctx, opts, repo, flags.listen, flags.plan, plan, snapshot, sessions, sessionHealth, checkpoints, checkpointHealth, flags.head, flags.allowRemote, flags.networkState)
 	}
 	if flags.format == "json" {
 		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
@@ -129,7 +164,7 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 	return flags, nil
 }
 
-func serveCoordinate(ctx context.Context, opts Options, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth, allowRemote bool, networkStatePath string) error {
+func serveCoordinate(ctx context.Context, opts Options, repo, address, planPath string, plan coordinate.Plan, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth, head, allowRemote bool, networkStatePath string) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
@@ -149,7 +184,29 @@ func serveCoordinate(ctx context.Context, opts Options, address, planPath string
 	if err != nil {
 		return err
 	}
-	handler := coordinateHandler(store, snapshot, sessions, health, checkpoints, checkpointHealth, network)
+	runtime := &coordinateRuntime{
+		data: coordinateData{snapshot: snapshot, sessions: sessions, sessionHealth: health, checkpoints: checkpoints, checkpointHealth: checkpointHealth},
+		refresh: func(refreshContext context.Context) (coordinateData, error) {
+			nextSnapshot, buildErr := sem.BuildProviderSnapshotWithOptions(refreshContext, repo, opts.Version, sem.ProviderSnapshotOptions{
+				NoNetwork: true, Worktree: !head, Profile: sem.ProfileFull,
+			})
+			if buildErr != nil {
+				return coordinateData{}, buildErr
+			}
+			nextSessions, sessionErr := coordinate.LoadEntireSessions(refreshContext, "entire")
+			nextSessionHealth := coordinate.ProviderHealth{Available: sessionErr == nil}
+			if sessionErr != nil {
+				nextSessionHealth.Detail = sessionErr.Error()
+			}
+			nextCheckpoints, checkpointErr := coordinate.LoadEntireCheckpoints(refreshContext, "entire")
+			nextCheckpointHealth := coordinate.ProviderHealth{Available: checkpointErr == nil}
+			if checkpointErr != nil {
+				nextCheckpointHealth.Detail = checkpointErr.Error()
+			}
+			return coordinateData{snapshot: nextSnapshot, sessions: nextSessions, sessionHealth: nextSessionHealth, checkpoints: nextCheckpoints, checkpointHealth: nextCheckpointHealth}, nil
+		},
+	}
+	handler := coordinateHandler(store, runtime, network)
 	server := &http.Server{
 		Addr: address, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
@@ -168,13 +225,14 @@ func serveCoordinate(ctx context.Context, opts Options, address, planPath string
 	return err
 }
 
-func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapshot, sessions []coordinate.Session, health coordinate.ProviderHealth, checkpoints []coordinate.Checkpoint, checkpointHealth coordinate.ProviderHealth, network *coordinate.NetworkStore) http.Handler {
+func coordinateHandler(store *coordinate.PlanStore, runtime *coordinateRuntime, network *coordinate.NetworkStore) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
 		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
 	})
 	mux.HandleFunc("GET /api/v1/report", func(out http.ResponseWriter, _ *http.Request) {
-		report, err := coordinate.AnalyzeWithActivity(store.Current(), snapshot, sessions, health, checkpoints, checkpointHealth)
+		data := runtime.current()
+		report, err := coordinate.AnalyzeWithActivity(store.Current(), data.snapshot, data.sessions, data.sessionHealth, data.checkpoints, data.checkpointHealth)
 		if err != nil {
 			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -185,7 +243,21 @@ func coordinateHandler(store *coordinate.PlanStore, snapshot sem.ProviderSnapsho
 		writeAPIJSON(out, http.StatusOK, store.Current())
 	})
 	mux.HandleFunc("GET /api/v1/sessions", func(out http.ResponseWriter, _ *http.Request) {
-		writeAPIJSON(out, http.StatusOK, map[string]any{"sessions": sessions, "health": health})
+		data := runtime.current()
+		writeAPIJSON(out, http.StatusOK, map[string]any{"sessions": data.sessions, "health": data.sessionHealth})
+	})
+	mux.HandleFunc("POST /api/v1/refresh", func(out http.ResponseWriter, request *http.Request) {
+		data, err := runtime.reload(request.Context())
+		if err != nil {
+			writeAPIJSON(out, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+			return
+		}
+		report, err := coordinate.AnalyzeWithActivity(store.Current(), data.snapshot, data.sessions, data.sessionHealth, data.checkpoints, data.checkpointHealth)
+		if err != nil {
+			writeAPIJSON(out, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeAPIJSON(out, http.StatusOK, report)
 	})
 	registerNetworkRoutes(mux, network)
 	mux.HandleFunc("PUT /api/v1/plan", func(out http.ResponseWriter, request *http.Request) {

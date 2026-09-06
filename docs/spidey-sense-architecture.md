@@ -132,6 +132,14 @@ The connectivity contract is:
 - `POST /api/v1/agents/{id}/heartbeat`
 - `GET /api/v1/teams/{id}/agents`
 - `GET /api/v1/teams/{id}/events` (SSE)
+- `POST /api/v1/refresh` (rebuild repository evidence and reload Entire activity)
+
+The browser event client reconnects with bounded exponential backoff and the
+heartbeat path continues to poll the authenticated roster, so an interrupted
+SSE connection does not turn stale state into apparent certainty. Private
+invite links encode join credentials in the URL fragment, which is not included
+in the HTTP page request. The site removes that fragment after a successful
+join.
 
 ### 7. Dashboard
 

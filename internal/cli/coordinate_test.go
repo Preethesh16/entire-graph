@@ -61,7 +61,8 @@ func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := coordinateHandler(store, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{}, nil)
+	runtime := &coordinateRuntime{data: coordinateData{snapshot: sem.ProviderSnapshot{}}}
+	handler := coordinateHandler(store, runtime, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/report", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -73,8 +74,34 @@ func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
 	}
 }
 
+func TestCoordinateHandlerRefreshesRepositoryEvidence(t *testing.T) {
+	plan := coordinate.Plan{SchemaVersion: coordinate.PlanSchemaVersion, Team: coordinate.Team{ID: "team", Name: "Team"}}
+	store, err := coordinate.NewPlanStore(filepath.Join(t.TempDir(), "plan.json"), plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshes := 0
+	runtime := &coordinateRuntime{
+		data: coordinateData{snapshot: sem.ProviderSnapshot{}},
+		refresh: func(context.Context) (coordinateData, error) {
+			refreshes++
+			return coordinateData{snapshot: sem.ProviderSnapshot{}}, nil
+		},
+	}
+	handler := coordinateHandler(store, runtime, nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/refresh", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || refreshes != 1 {
+		t.Fatalf("refresh = %d calls=%d body=%s", response.Code, refreshes, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"schema_version":"spidey-sense/v1alpha1"`) {
+		t.Fatalf("response = %s", response.Body.String())
+	}
+}
+
 func TestCoordinateListenRejectsNonLoopback(t *testing.T) {
-	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", "plan.json", coordinate.Plan{}, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{}, false, "")
+	err := serveCoordinate(t.Context(), Options{}, t.TempDir(), "0.0.0.0:4317", "plan.json", coordinate.Plan{}, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{}, false, false, "")
 	if err == nil || !strings.Contains(err.Error(), "loopback") {
 		t.Fatalf("error = %v", err)
 	}
@@ -90,7 +117,8 @@ func TestCoordinateNetworkEndpointsAuthenticateAndRejectPromptFields(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := coordinateHandler(store, sem.ProviderSnapshot{}, nil, coordinate.ProviderHealth{}, nil, coordinate.ProviderHealth{}, network)
+	runtime := &coordinateRuntime{data: coordinateData{snapshot: sem.ProviderSnapshot{}}}
+	handler := coordinateHandler(store, runtime, network)
 
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(method, path, strings.NewReader(body))

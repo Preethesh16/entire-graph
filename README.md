@@ -2,6 +2,44 @@
 
 # Entire Graph
 
+## Spidey Sense production workflow
+
+Spidey Sense is the browser-first team coordination surface included in this
+fork. It combines authenticated cross-machine presence with repository-local
+Entire Graph evidence. The browser never claims access to Git or Entire data it
+cannot observe.
+
+Build and run the coordinator against a real clone:
+
+```sh
+go build -o entire-graph ./cmd/entire-graph
+./entire-graph coordinate \
+  --repo /path/to/HardCoders_ \
+  --plan examples/hardcoders-plan.json \
+  --listen 127.0.0.1:4331 \
+  --network-state /path/to/private/spidey-network.json
+```
+
+Serve the optimized website in a second process:
+
+```sh
+cd web/spidey-sense
+npm ci
+npm run build
+SPIDEY_API_TARGET=http://127.0.0.1:4331 npm run preview -- --host 127.0.0.1 --port 5176
+```
+
+Open `http://127.0.0.1:5176`, create a room, and send the private invite link.
+The recipient joins entirely through the website. For cross-machine use, deploy
+both processes behind one authenticated HTTPS origin, or bind the coordinator
+to a reachable interface with the explicit `--allow-remote` flag and equivalent
+network-layer TLS/access controls. `127.0.0.1` is intentionally local only.
+
+The Plan view assigns authenticated live members by stable member ID. “Refresh
+evidence” rebuilds the no-egress Graph snapshot and reloads Entire activity.
+Graph warnings and partial failures remain visible; incomplete relationships
+require source or test verification.
+
 Coding agents lose time before the edit, while they are still looking for the
 right code. Entire Graph is a plugin for the Entire CLI that gives an agent a
 precomputed map of one Git repository: ranked code search plus definitions,
