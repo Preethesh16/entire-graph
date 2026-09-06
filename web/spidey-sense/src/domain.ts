@@ -79,6 +79,7 @@ export interface GitActivity {
 }
 
 export interface GitSnapshot {
+	available?: boolean;
   branch: string;
   head: string;
   dirtyFileCount: number;

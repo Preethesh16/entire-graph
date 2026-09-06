@@ -24,14 +24,19 @@ type Plan struct {
 }
 
 type Team struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Members []Member `json:"members"`
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	CallSign  string   `json:"call_sign,omitempty"`
+	Objective string   `json:"objective,omitempty"`
+	Members   []Member `json:"members"`
 }
 
 type Member struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
+	Role       string   `json:"role,omitempty"`
+	Archetype  string   `json:"archetype,omitempty"`
+	Accent     string   `json:"accent,omitempty"`
 	SessionIDs []string `json:"session_ids,omitempty"`
 }
 
@@ -79,6 +84,8 @@ type GraphProvenance struct {
 	Tree              string `json:"tree,omitempty"`
 	Profile           string `json:"profile"`
 	CompletenessLevel string `json:"completeness_level"`
+	NodeCount         int    `json:"node_count"`
+	RelationCount     int    `json:"relation_count"`
 }
 
 type Summary struct {
@@ -229,6 +236,7 @@ func AnalyzeWithSessions(plan Plan, snapshot sem.ProviderSnapshot, sessions []Se
 			SchemaVersion: snapshot.Header.SchemaVersion, RepoRoot: snapshot.Header.RepoRoot,
 			Commit: snapshot.Header.Commit, Tree: snapshot.Header.Tree, Profile: snapshot.Header.Profile,
 			CompletenessLevel: snapshot.Header.Stats.CompletenessLevel,
+			NodeCount:         len(snapshot.Symbols) + len(snapshot.Files), RelationCount: len(snapshot.Relations),
 		},
 		Team: plan.Team, Missions: append([]Mission(nil), plan.Missions...),
 		Warnings: snapshot.Header.Warnings, Failures: snapshot.Header.PartialFailures,

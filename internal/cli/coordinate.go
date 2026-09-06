@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/entireio/entire-graph/internal/coordinate"
 	"github.com/entireio/entire-graph/internal/sem"
@@ -22,6 +25,7 @@ type coordinateFlags struct {
 	plan   string
 	format string
 	head   bool
+	listen string
 }
 
 func runCoordinate(ctx context.Context, opts Options, args []string) error {
@@ -53,6 +57,9 @@ func runCoordinate(ctx context.Context, opts Options, args []string) error {
 	report, err := coordinate.AnalyzeWithSessions(plan, snapshot, sessions, sessionHealth)
 	if err != nil {
 		return err
+	}
+	if flags.listen != "" {
+		return serveCoordinate(ctx, opts, flags.listen, report)
 	}
 	if flags.format == "json" {
 		encoder := json.NewEncoder(termsafe.NewJSONWriter(opts.Stdout))
@@ -87,6 +94,12 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 			flags.format = args[index]
 		case "--head":
 			flags.head = true
+		case "--listen":
+			index++
+			if index >= len(args) {
+				return flags, errors.New("coordinate --listen requires a loopback address")
+			}
+			flags.listen = args[index]
 		default:
 			return flags, unexpectedArgumentsError("coordinate", "", []string{args[index]})
 		}
@@ -98,6 +111,53 @@ func parseCoordinateFlags(args []string) (coordinateFlags, error) {
 		return flags, fmt.Errorf("coordinate --format must be text or json, got %q", flags.format)
 	}
 	return flags, nil
+}
+
+func serveCoordinate(ctx context.Context, opts Options, address string, report coordinate.Report) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("coordinate --listen requires host:port: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return errors.New("coordinate --listen must bind to localhost or a loopback IP")
+	}
+	handler := coordinateHandler(report)
+	server := &http.Server{
+		Addr: address, Handler: handler,
+		ReadHeaderTimeout: 5 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	fmt.Fprintf(opts.Stderr, "Spidey Sense API listening on http://%s/api/v1/report\n", address)
+	err = server.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func coordinateHandler(report coordinate.Report) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/health", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, map[string]any{"status": "ok", "schema_version": coordinate.ReportSchemaVersion})
+	})
+	mux.HandleFunc("GET /api/v1/report", func(out http.ResponseWriter, _ *http.Request) {
+		writeAPIJSON(out, http.StatusOK, report)
+	})
+	return mux
+}
+
+func writeAPIJSON(out http.ResponseWriter, status int, value any) {
+	out.Header().Set("Content-Type", "application/json; charset=utf-8")
+	out.Header().Set("Cache-Control", "no-store")
+	out.Header().Set("X-Content-Type-Options", "nosniff")
+	out.WriteHeader(status)
+	_ = json.NewEncoder(out).Encode(value)
 }
 
 func readCoordinatePlan(path string) (coordinate.Plan, error) {

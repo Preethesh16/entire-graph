@@ -3,6 +3,8 @@
   "team": {
     "id": "buildathon-demo",
     "name": "Buildathon Demo Team",
+    "call_sign": "Web Guard",
+    "objective": "Coordinate concurrent changes before they collide.",
     "members": [
       {
         "id": "runner-cli",

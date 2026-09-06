@@ -42,6 +42,14 @@ interface GitPanelProps {
 }
 
 export function GitPanel({ git }: GitPanelProps) {
+	if (git.available === false) {
+		return (
+			<section className="panel git-panel" aria-labelledby="git-activity-title">
+				<div className="section-heading"><div><p className="eyebrow">Source control</p><h2 id="git-activity-title">Git activity</h2></div></div>
+				<p className="muted-copy">Git adapter not connected in this slice.</p>
+			</section>
+		);
+	}
   return (
     <section className="panel git-panel" aria-labelledby="git-activity-title">
       <div className="section-heading">

@@ -84,6 +84,7 @@ The first backend slice is now available on the `progress` branch:
 - a read-only Entire session adapter that exposes bounded public activity metadata while intentionally omitting prompt text;
 - isolated session-provider health, so analysis remains available if Entire activity cannot be loaded;
 - additive `entire graph coordinate` text and JSON output;
+- a loopback-only `/api/v1/report` endpoint and Vite proxy feeding the dashboard from the same immutable decision report;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
 
@@ -95,6 +96,23 @@ go run ./cmd/entire-graph coordinate \
   --plan examples/spidey-plan.json \
   --format text
 ```
+
+Run the integrated dashboard in two terminals:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . \
+  --plan examples/spidey-plan.json \
+  --listen 127.0.0.1:4317
+```
+
+```bash
+cd web/spidey-sense
+npm ci
+npm run dev
+```
+
+The development server proxies `/api` to the loopback backend. Synthetic dashboard data remains only as an explicit test/demo fixture; production `App.tsx` loads the real API and renders honest loading or provider-error states. The Git panel reports that its adapter is not connected instead of displaying fabricated activity.
 
 ## Entire Graph findings and verification
 

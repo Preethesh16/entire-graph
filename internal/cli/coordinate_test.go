@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/entireio/entire-graph/internal/coordinate"
 )
 
 func TestCoordinateCommandReportsDynamicSameFileCollision(t *testing.T) {
@@ -42,6 +46,26 @@ func TestCoordinateCommandReportsDynamicSameFileCollision(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("output missing %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestCoordinateHandlerServesVersionedReport(t *testing.T) {
+	handler := coordinateHandler(coordinate.Report{SchemaVersion: coordinate.ReportSchemaVersion})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/report", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"schema_version":"spidey-sense/v1alpha1"`) {
+		t.Fatalf("response = %d %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache control = %q", response.Header().Get("Cache-Control"))
+	}
+}
+
+func TestCoordinateListenRejectsNonLoopback(t *testing.T) {
+	err := serveCoordinate(t.Context(), Options{}, "0.0.0.0:4317", coordinate.Report{})
+	if err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
