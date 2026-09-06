@@ -103,6 +103,8 @@ func Run(ctx context.Context, opts Options, args []string) error {
 		return runImpact(ctx, opts, args[1:])
 	case "coordinate":
 		return runCoordinate(ctx, opts, args[1:])
+	case "connect-agent":
+		return runConnectAgent(ctx, opts, args[1:])
 	case "verify":
 		return runVerify(ctx, opts, args[1:])
 	case "stats":

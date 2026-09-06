@@ -79,16 +79,19 @@ type ProviderHealth struct {
 }
 
 type GraphProvenance struct {
-	Provider          string `json:"provider"`
-	ProviderVersion   string `json:"provider_version"`
-	SchemaVersion     string `json:"schema_version"`
-	RepoRoot          string `json:"repo_root"`
-	Commit            string `json:"commit,omitempty"`
-	Tree              string `json:"tree,omitempty"`
-	Profile           string `json:"profile"`
-	CompletenessLevel string `json:"completeness_level"`
-	NodeCount         int    `json:"node_count"`
-	RelationCount     int    `json:"relation_count"`
+	Provider            string `json:"provider"`
+	ProviderVersion     string `json:"provider_version"`
+	SchemaVersion       string `json:"schema_version"`
+	RepoRoot            string `json:"repo_root"`
+	Commit              string `json:"commit,omitempty"`
+	Tree                string `json:"tree,omitempty"`
+	Profile             string `json:"profile"`
+	CompletenessLevel   string `json:"completeness_level"`
+	NodeCount           int    `json:"node_count"`
+	RelationCount       int    `json:"relation_count"`
+	WarningCount        int    `json:"warning_count"`
+	PartialFailureCount int    `json:"partial_failure_count"`
+	AnalysisPartial     bool   `json:"analysis_partial"`
 }
 
 type Summary struct {
@@ -107,25 +110,31 @@ type Diagnostic struct {
 }
 
 type Decision struct {
-	Level           string   `json:"level"`
-	Reason          string   `json:"reason"`
-	MissionA        string   `json:"mission_a"`
-	MissionB        string   `json:"mission_b"`
-	Path            []Step   `json:"path,omitempty"`
-	TestTargets     []string `json:"test_targets,omitempty"`
-	Recommendations []string `json:"recommendations"`
-	Caveat          string   `json:"caveat,omitempty"`
+	Level                string   `json:"level"`
+	Reason               string   `json:"reason"`
+	MissionA             string   `json:"mission_a"`
+	MissionB             string   `json:"mission_b"`
+	Path                 []Step   `json:"path,omitempty"`
+	TestTargets          []string `json:"test_targets,omitempty"`
+	Recommendations      []string `json:"recommendations"`
+	Caveat               string   `json:"caveat,omitempty"`
+	EvidenceClass        string   `json:"evidence_class"`
+	VerificationRequired bool     `json:"verification_required"`
+	Verification         []string `json:"verification"`
 }
 
 type Step struct {
-	From       Endpoint   `json:"from"`
-	To         Endpoint   `json:"to"`
-	Relation   string     `json:"relation"`
-	Direction  string     `json:"direction"`
-	Confidence float64    `json:"confidence"`
-	Resolution string     `json:"resolution,omitempty"`
-	Reason     string     `json:"reason,omitempty"`
-	Evidence   []Evidence `json:"evidence,omitempty"`
+	From            Endpoint   `json:"from"`
+	To              Endpoint   `json:"to"`
+	Relation        string     `json:"relation"`
+	Direction       string     `json:"direction"`
+	Confidence      float64    `json:"confidence"`
+	Resolution      string     `json:"resolution,omitempty"`
+	EvidenceClass   string     `json:"evidence_class"`
+	Reason          string     `json:"reason,omitempty"`
+	Evidence        []Evidence `json:"evidence,omitempty"`
+	WarningCodes    []string   `json:"warning_codes,omitempty"`
+	EvidenceDropped int        `json:"evidence_dropped,omitempty"`
 }
 
 type Endpoint struct {
@@ -239,6 +248,7 @@ func AnalyzeWithActivity(plan Plan, snapshot sem.ProviderSnapshot, sessions []Se
 		return Report{}, err
 	}
 	index := newGraphIndex(snapshot)
+	analysis := newGraphAnalysisState(snapshot)
 	report := Report{
 		SchemaVersion: ReportSchemaVersion,
 		Graph: GraphProvenance{
@@ -247,6 +257,8 @@ func AnalyzeWithActivity(plan Plan, snapshot sem.ProviderSnapshot, sessions []Se
 			Commit: snapshot.Header.Commit, Tree: snapshot.Header.Tree, Profile: snapshot.Header.Profile,
 			CompletenessLevel: snapshot.Header.Stats.CompletenessLevel,
 			NodeCount:         len(snapshot.Symbols) + len(snapshot.Files), RelationCount: len(snapshot.Relations),
+			WarningCount: len(snapshot.Header.Warnings), PartialFailureCount: len(snapshot.Header.PartialFailures),
+			AnalysisPartial: analysis.partial(),
 		},
 		Team: plan.Team, Missions: append([]Mission(nil), plan.Missions...),
 		Warnings: snapshot.Header.Warnings, Failures: snapshot.Header.PartialFailures,
@@ -264,7 +276,7 @@ func AnalyzeWithActivity(plan Plan, snapshot sem.ProviderSnapshot, sessions []Se
 	}
 	for left := 0; left < len(resolved); left++ {
 		for right := left + 1; right < len(resolved); right++ {
-			decision := index.decide(resolved[left], resolved[right], snapshot.Header.Stats.CompletenessLevel)
+			decision := index.decide(resolved[left], resolved[right], graphAnalysisStateForMissions(snapshot, index, resolved[left], resolved[right]))
 			report.Decisions = append(report.Decisions, decision)
 			report.Summary.Pairs++
 			switch decision.Level {
@@ -414,13 +426,76 @@ func (index graphIndex) symbolMatches(target Target) []sem.SymbolRecord {
 	return matches
 }
 
-func (index graphIndex) decide(left, right resolvedMission, completeness string) Decision {
+type graphAnalysisState struct {
+	completeness string
+	warnings     int
+	failures     int
+}
+
+func (state graphAnalysisState) partial() bool {
+	switch state.completeness {
+	case "ok", "complete":
+		return state.warnings > 0 || state.failures > 0
+	default:
+		return true
+	}
+}
+
+func newGraphAnalysisState(snapshot sem.ProviderSnapshot) graphAnalysisState {
+	warnings := 0
+	for _, warning := range snapshot.Header.Warnings {
+		// Worktree provenance identifies which source was analyzed; by itself it
+		// does not mean relationships were dropped or resolved heuristically.
+		if warning.Code != "W_WORKTREE_SNAPSHOT" {
+			warnings++
+		}
+	}
+	return graphAnalysisState{
+		completeness: snapshot.Header.Stats.CompletenessLevel,
+		warnings:     warnings,
+		failures:     len(snapshot.Header.PartialFailures),
+	}
+}
+
+func graphAnalysisStateForMissions(snapshot sem.ProviderSnapshot, index graphIndex, missions ...resolvedMission) graphAnalysisState {
+	languages := map[string]bool{}
+	for _, mission := range missions {
+		for path := range mission.files {
+			if language := index.filesByPath[path].Language; language != "" {
+				languages[language] = true
+			}
+		}
+	}
+	relevant := func(path string) bool {
+		if path == "" || len(languages) == 0 {
+			return true
+		}
+		file, ok := index.filesByPath[filepath.ToSlash(path)]
+		return !ok || file.Language == "" || languages[file.Language]
+	}
+	state := graphAnalysisState{completeness: snapshot.Header.Stats.CompletenessLevel}
+	for _, warning := range snapshot.Header.Warnings {
+		if warning.Code != "W_WORKTREE_SNAPSHOT" && relevant(warning.FilePath) {
+			state.warnings++
+		}
+	}
+	for _, failure := range snapshot.Header.PartialFailures {
+		if relevant(failure.FilePath) {
+			state.failures++
+		}
+	}
+	return state
+}
+
+func (index graphIndex) decide(left, right resolvedMission, analysis graphAnalysisState) Decision {
 	decision := Decision{MissionA: left.mission.ID, MissionB: right.mission.ID}
 	if overlap := firstOverlap(left.symbols, right.symbols); overlap != "" {
 		endpoint := index.endpoints[overlap]
 		decision.Level, decision.Reason = "BLOCK", "same symbol is assigned to both missions"
-		decision.Path = []Step{{From: endpoint, To: endpoint, Relation: "SAME_SYMBOL", Direction: "shared", Confidence: 1}}
+		decision.Path = []Step{{From: endpoint, To: endpoint, Relation: "SAME_SYMBOL", Direction: "shared", Confidence: 1, EvidenceClass: "confirmed"}}
+		decision.EvidenceClass = "confirmed"
 		decision.Recommendations = []string{"Assign the symbol to one mission, or sequence the missions before editing."}
+		decision.Verification = []string{"Verify the mission assignments against the plan before editing."}
 		return decision
 	}
 	if overlap := firstOverlap(left.files, right.files); overlap != "" {
@@ -429,20 +504,30 @@ func (index graphIndex) decide(left, right resolvedMission, completeness string)
 			endpoint.ID = file.ID
 		}
 		decision.Level, decision.Reason = "BLOCK", "same file is assigned to both missions"
-		decision.Path = []Step{{From: endpoint, To: endpoint, Relation: "SAME_FILE", Direction: "shared", Confidence: 1}}
+		decision.Path = []Step{{From: endpoint, To: endpoint, Relation: "SAME_FILE", Direction: "shared", Confidence: 1, EvidenceClass: "confirmed"}}
+		decision.EvidenceClass = "confirmed"
 		decision.Recommendations = []string{"Assign the file to one mission, or sequence the missions before editing."}
+		decision.Verification = []string{"Verify the mission assignments against the plan before editing."}
 		return decision
 	}
 	path := index.shortestPath(left.endpoints, right.endpoints, 2)
 	if len(path) == 0 {
 		decision.Level, decision.Reason = "CLEAR", "no connection found within two graph hops"
+		decision.EvidenceClass = "incomplete"
+		decision.VerificationRequired = true
 		decision.Recommendations = []string{"Proceed in parallel, while treating this bounded static analysis as advisory."}
-		decision.Caveat = clearCaveat(completeness)
+		decision.Verification = []string{"Inspect the source for runtime wiring, generated code, reflection, or dynamic dispatch, then run focused tests for both mission targets."}
+		decision.Caveat = clearCaveat(analysis)
 		return decision
 	}
 	decision.Path = path
+	decision.EvidenceClass = pathEvidenceClass(path)
+	if analysis.partial() {
+		decision.EvidenceClass = "incomplete"
+	}
+	decision.VerificationRequired = decision.EvidenceClass != "confirmed"
 	decision.TestTargets = index.testTargets(left.endpoints, right.endpoints)
-	if len(path) == 1 && blockingRelation(path[0]) {
+	if len(path) == 1 && blockingRelation(path[0]) && !analysis.partial() {
 		decision.Level, decision.Reason = "BLOCK", "direct structural dependency connects the missions"
 		decision.Recommendations = []string{"Sequence the dependency-changing mission first, then refresh and review the dependent mission."}
 	} else {
@@ -451,9 +536,15 @@ func (index graphIndex) decide(left, right resolvedMission, completeness string)
 	}
 	if len(decision.TestTargets) > 0 {
 		decision.Recommendations = append(decision.Recommendations, "Run or inspect the reported test targets before merging.")
+		decision.Verification = append(decision.Verification, "Run the reported test targets before merging.")
 	}
-	if completeness != "" && completeness != "complete" {
-		decision.Caveat = "Graph completeness is " + completeness + "; inspect reported failures before relying on this decision."
+	if decision.VerificationRequired {
+		decision.Verification = append(decision.Verification, "Inspect the reported source locations and confirm runtime dispatch before relying on this relationship.")
+	} else if len(decision.Verification) == 0 {
+		decision.Verification = append(decision.Verification, "Review the reported source locations and run focused tests if the relationship affects runtime behavior.")
+	}
+	if analysis.partial() {
+		decision.Caveat = partialCaveat(analysis)
 	}
 	return decision
 }
@@ -519,7 +610,8 @@ func (index graphIndex) step(current string, edge adjacent) Step {
 	step := Step{
 		From: index.endpoints[current], To: index.endpoints[edge.next], Relation: edge.relation.Type,
 		Direction: direction, Confidence: edge.relation.Confidence, Resolution: edge.relation.Resolution,
-		Reason: edge.relation.Reason,
+		EvidenceClass: relationEvidenceClass(edge.relation), Reason: edge.relation.Reason,
+		WarningCodes: append([]string(nil), edge.relation.WarningCodes...), EvidenceDropped: edge.relation.EvidenceDropped,
 	}
 	for _, evidence := range edge.relation.Evidence {
 		step.Evidence = append(step.Evidence, Evidence{Kind: evidence.Kind, File: evidence.FilePath, StartLine: evidence.StartLine, EndLine: evidence.EndLine, Detail: evidence.Detail})
@@ -528,7 +620,7 @@ func (index graphIndex) step(current string, edge adjacent) Step {
 }
 
 func blockingRelation(step Step) bool {
-	if step.Confidence > 0 && step.Confidence < 0.7 || step.Resolution == "name_only" {
+	if step.EvidenceClass != "confirmed" {
 		return false
 	}
 	switch step.Relation {
@@ -576,9 +668,46 @@ func conventionalTestPath(path string) bool {
 		strings.Contains(base, ".test.") || strings.Contains(base, ".spec.")
 }
 
-func clearCaveat(completeness string) string {
-	if completeness == "" || completeness == "complete" {
+func relationEvidenceClass(relation sem.RelationRecord) string {
+	if len(relation.WarningCodes) > 0 || relation.EvidenceDropped > 0 {
+		return "incomplete"
+	}
+	switch relation.Type {
+	case "HANDLES_ROUTE", "HTTP_CALLS", "EMITS", "LISTENS_ON", "HANDLES_TOOL", "SIMILAR_TO", "TESTS", "FILE_CHANGES_WITH":
+		return "heuristic"
+	}
+	switch relation.Resolution {
+	case "exact", "package", "import_resolved", "resolved":
+		return "confirmed"
+	default:
+		return "heuristic"
+	}
+}
+
+func pathEvidenceClass(path []Step) string {
+	result := "confirmed"
+	for _, step := range path {
+		if step.EvidenceClass == "incomplete" {
+			return "incomplete"
+		}
+		if step.EvidenceClass != "confirmed" {
+			result = "heuristic"
+		}
+	}
+	return result
+}
+
+func clearCaveat(analysis graphAnalysisState) string {
+	if !analysis.partial() {
 		return "CLEAR means no connection was found within two graph hops; it is not proof of independence."
 	}
-	return "Graph completeness is " + completeness + "; CLEAR is not proof of independence."
+	return partialCaveat(analysis) + " CLEAR is not proof of independence."
+}
+
+func partialCaveat(analysis graphAnalysisState) string {
+	level := analysis.completeness
+	if level == "" {
+		level = "unknown"
+	}
+	return fmt.Sprintf("Graph analysis is partial (completeness=%s, warnings=%d, failures=%d); inspect diagnostics before relying on this decision.", level, analysis.warnings, analysis.failures)
 }

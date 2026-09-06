@@ -1,4 +1,4 @@
-import type { DashboardSnapshot, EvidenceNode, EvidenceRelation, RiskSignal } from './domain';
+import type { DashboardSnapshot, EvidenceClass, EvidenceNode, EvidenceRelation, RiskSignal } from './domain';
 
 export interface CoordinatePlan {
   schema_version: string;
@@ -19,6 +19,9 @@ interface CoordinateReport {
     completeness_level: string;
     node_count: number;
     relation_count: number;
+    warning_count?: number;
+    partial_failure_count?: number;
+    analysis_partial?: boolean;
   };
   team: {
     id: string;
@@ -30,8 +33,9 @@ interface CoordinateReport {
   missions: Array<{ id: string; title: string; intent?: string; owner: string; status: DashboardSnapshot['missions'][number]['status']; targets: Array<{ file?: string; symbol?: string }> }>;
   decisions: Array<{
     level: RiskSignal['level']; reason: string; mission_a: string; mission_b: string;
-    path?: Array<{ from: ReportEndpoint; to: ReportEndpoint; relation: string; confidence: number; resolution?: string }>;
+    path?: Array<{ from: ReportEndpoint; to: ReportEndpoint; relation: string; confidence: number; resolution?: string; evidence_class?: EvidenceClass }>;
     test_targets?: string[]; recommendations: string[]; caveat?: string;
+    evidence_class?: EvidenceClass; verification_required?: boolean; verification?: string[];
   }>;
   sessions?: Array<{ session_id: string; agent: string; status: string }>;
   session_health: { available: boolean; detail?: string };
@@ -68,7 +72,8 @@ export function toDashboardSnapshot(report: CoordinateReport): DashboardSnapshot
         to: to.id,
         type: step.relation,
         confidence: step.confidence,
-        resolution: step.resolution === 'exact' || step.resolution === 'resolved' ? 'resolved' : step.resolution ? 'heuristic' : 'partial',
+        resolution: ['exact', 'resolved', 'package', 'import_resolved'].includes(step.resolution ?? '') ? 'resolved' : step.resolution ? 'heuristic' : 'partial',
+        evidenceClass: step.evidence_class ?? (['exact', 'resolved', 'package', 'import_resolved'].includes(step.resolution ?? '') ? 'confirmed' : step.resolution ? 'heuristic' : 'incomplete'),
       });
     }
     return {
@@ -81,9 +86,16 @@ export function toDashboardSnapshot(report: CoordinateReport): DashboardSnapshot
       relations,
       recommendation: decision.recommendations.join(' '),
       reviewTargets: decision.test_targets ?? [],
+      evidenceClass: decision.evidence_class ?? 'incomplete',
+      verificationRequired: decision.verification_required ?? true,
+      verification: decision.verification ?? ['Inspect source and run focused tests before relying on this claim.'],
     };
   });
   const generatedAt = new Date().toISOString();
+  const graphAnalysisPartial = report.graph.analysis_partial ?? (
+    !['ok', 'complete'].includes(report.graph.completeness_level)
+    || (report.graph.partial_failure_count ?? 0) > 0
+  );
   return {
     generatedAt,
     team: {
@@ -114,12 +126,20 @@ export function toDashboardSnapshot(report: CoordinateReport): DashboardSnapshot
     })),
     risks,
     providers: [
-      { id: 'graph', name: `${report.graph.provider} ${report.graph.provider_version}`, status: report.graph.completeness_level === 'complete' ? 'online' : 'degraded', detail: `${report.graph.profile} profile · ${report.graph.completeness_level}`, lastCheckedAt: generatedAt },
+      { id: 'graph', name: `${report.graph.provider} ${report.graph.provider_version}`, status: graphAnalysisPartial ? 'degraded' : 'online', detail: `${report.graph.profile} profile · ${report.graph.completeness_level}`, lastCheckedAt: generatedAt },
       { id: 'entire', name: 'Entire sessions', status: report.session_health.available ? 'online' : 'offline', detail: report.session_health.detail ?? `${report.sessions?.length ?? 0} mapped sessions`, lastCheckedAt: generatedAt },
       { id: 'checkpoints', name: 'Entire checkpoints', status: report.checkpoint_health?.available ? 'online' : 'offline', detail: report.checkpoint_health?.detail ?? `${report.checkpoints?.length ?? 0} team checkpoints`, lastCheckedAt: generatedAt },
     ],
     git: { available: false, branch: '', head: '', dirtyFileCount: 0, ahead: 0, behind: 0, activity: [] },
-    graph: { nodeCount: report.graph.node_count, relationCount: report.graph.relation_count, analyzedDepth: 2, complete: report.graph.completeness_level === 'complete', warning: report.graph.completeness_level === 'complete' ? undefined : `Graph is ${report.graph.completeness_level}` },
+    graph: {
+      nodeCount: report.graph.node_count, relationCount: report.graph.relation_count, analyzedDepth: 2,
+      complete: !graphAnalysisPartial,
+      warning: !graphAnalysisPartial
+        ? undefined
+        : `Graph is ${report.graph.completeness_level}; ${report.graph.warning_count ?? 0} warnings, ${report.graph.partial_failure_count ?? 0} partial failures`,
+      warningCount: report.graph.warning_count ?? 0,
+      partialFailureCount: report.graph.partial_failure_count ?? 0,
+    },
     checkpoints: (report.checkpoints ?? []).map((checkpoint) => ({ id: checkpoint.id, message: checkpoint.message, date: checkpoint.date, sessionId: checkpoint.session_id, condensationId: checkpoint.condensation_id })),
   };
 }
@@ -127,6 +147,12 @@ export function toDashboardSnapshot(report: CoordinateReport): DashboardSnapshot
 export async function loadDashboard(signal?: AbortSignal): Promise<DashboardSnapshot> {
   const response = await fetch('/api/v1/report', { signal, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error(`Mission API returned ${response.status}`);
+  return toDashboardSnapshot(await response.json() as CoordinateReport);
+}
+
+export async function refreshDashboard(): Promise<DashboardSnapshot> {
+  const response = await fetch('/api/v1/refresh', { method: 'POST', headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Graph refresh returned ${response.status}`);
   return toDashboardSnapshot(await response.json() as CoordinateReport);
 }
 

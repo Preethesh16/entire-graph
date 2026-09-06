@@ -85,6 +85,14 @@ Initial decision semantics:
 
 These are coordination decisions, not compiler guarantees. Each result includes the target pair, ordered path, relation types, evidence locations, confidence/resolution, recommendation, and completeness caveat.
 
+Each path step and decision also carries an evidence class:
+
+- **confirmed:** exact, package-bound, or import-bound structural evidence with no truncation warning;
+- **heuristic:** name-, pattern-, inferred-, framework-, test-, or co-change evidence;
+- **incomplete:** evidence with dropped/truncated support, or any Graph result produced from a degraded/partial snapshot.
+
+Only confirmed direct structural evidence can produce a relationship-based `BLOCK`. Heuristic or incomplete paths produce `REVIEW` and an explicit source/test verification requirement. A bounded absence is always labeled incomplete: `CLEAR` never means the runtime programs are independent.
+
 Recommendations are rule-based and verifiable:
 
 - sequence the upstream/dependency mission first;
@@ -92,6 +100,7 @@ Recommendations are rule-based and verifiable:
 - review named callers/type consumers;
 - run or inspect Graph-linked/conventional tests;
 - ask for manual review when evidence is incomplete.
+- inspect source/runtime registration and run focused tests when dynamic dispatch, reflection, generated code, or partial failures limit static resolution.
 
 ### 5. Read-only Git adapter
 
@@ -99,16 +108,38 @@ The initial Git adapter observes branch, HEAD, worktree status, worktrees, recen
 
 Git evidence supplements the declared plan and session data. It does not replace Graph relationships.
 
-### 6. Local API
+### 6. Shared-capable API
 
-The loopback service exposes a small, versioned surface:
+The service stays loopback-only by default, but can be explicitly bound to a reachable LAN address or deployed behind HTTPS. It exposes a small, versioned surface:
 
 - health and capability information;
 - aggregate dashboard snapshot;
 - validated mission-plan mutations;
 - explicit refresh/reanalysis.
+- team creation and invite-code joining;
+- token-scoped agent registration and bounded heartbeats;
+- authenticated team-agent snapshots and SSE events.
 
 Writes are bounded JSON requests. No endpoint accepts arbitrary commands. Errors are structured, and one unavailable provider cannot take down the aggregate response.
+
+Invite, admin, member-viewer, connector, and per-agent credentials are generated from cryptographic randomness and stored only as hashes. Names and roles come from explicit user input. The production website creates and joins rooms, registers detected browser presence, sends bounded heartbeats, and consumes authenticated SSE using a streaming fetch. It explicitly marks Git, Entire session, changed-file, and checkpoint metadata unavailable because a normal browser cannot observe them. The optional local connector can provide those allowlisted fields, but neither path has prompt, reasoning, terminal, file-content, environment, or secret fields.
+
+The connectivity contract is:
+
+- `POST /api/v1/teams`
+- `POST /api/v1/teams/{id}/join`
+- `POST /api/v1/agents/connect`
+- `POST /api/v1/agents/{id}/heartbeat`
+- `GET /api/v1/teams/{id}/agents`
+- `GET /api/v1/teams/{id}/events` (SSE)
+- `POST /api/v1/refresh` (rebuild repository evidence and reload Entire activity)
+
+The browser event client reconnects with bounded exponential backoff and the
+heartbeat path continues to poll the authenticated roster, so an interrupted
+SSE connection does not turn stale state into apparent certainty. Private
+invite links encode join credentials in the URL fragment, which is not included
+in the HTTP page request. The site removes that fragment after a successful
+join.
 
 ### 7. Dashboard
 
@@ -120,6 +151,7 @@ The dashboard prioritizes the decision workflow:
 - Web Zones for repository areas;
 - Web Nodes for files/symbols;
 - Strands for real Graph relations;
+- an SVG depth projection that remains keyboard-accessible and works without WebGL;
 - red Tangles for explainable risks;
 - a textual evidence drawer and recommended action;
 - Git timeline and provider health.

@@ -33,7 +33,7 @@ The initial demonstrable workflow is deliberately narrow:
 
 1. A lead creates a dynamic team plan with any number of members and missions.
 2. Team members run Codex or Claude Code with Entire enabled in the repository.
-3. A local coordinator reads public Entire session metadata and observable Git state.
+3. A shared coordinator accepts bounded, authenticated heartbeats from connectors running in teammates' Entire-enabled clones.
 4. Mission targets and touched files are resolved against an Entire Graph snapshot.
 5. A deterministic risk engine detects exact overlap and bounded structural paths.
 6. The dashboard shows progress, evidence, and an actionable recommendation.
@@ -64,7 +64,7 @@ See `docs/spidey-sense-architecture.md` for the detailed design.
 ## Optional features after the stable core
 
 - richer Codex and Claude provider-specific metadata;
-- multi-machine synchronization;
+- production identity federation and internet-scale hosting operations;
 - GitHub pull-request and merge adapters;
 - audited messages to supported agents;
 - checkpoint-intent versus semantic-change drift;
@@ -84,10 +84,15 @@ The first backend slice is now available on the `progress` branch:
 - a read-only Entire session adapter that exposes bounded public activity metadata while intentionally omitting prompt text;
 - isolated session-provider health, so analysis remains available if Entire activity cannot be loaded;
 - additive `entire graph coordinate` text and JSON output;
-- a loopback-only `/api/v1/report` endpoint and Vite proxy feeding the dashboard from the same immutable decision report;
+- a safe-by-default `/api/v1/report` endpoint and Vite proxy, with explicit shared/LAN binding for teammate connectors;
 - revision-checked, atomic plan persistence through `/api/v1/plan`, plus privacy-bounded session discovery for onboarding;
 - privacy-filtered Entire checkpoint nodes, scoped only to session IDs explicitly connected to the team;
-- separate Team Setup, Plan & Assign, Spidey Tracker, and Agent Activity views so raw monitoring does not clutter the roadmap;
+- persisted team invites, manually entered member identity, token-scoped connector registration, bounded heartbeats, authenticated agent listing, and SSE events for genuine cross-machine coordination;
+- production browser onboarding for creating rooms, joining invites, publishing bounded presence, and viewing the authenticated live roster without terminal interaction;
+- an `entire graph connect-agent` command that detects only allowlisted Entire/Git metadata and never transmits prompts, reasoning, terminal output, file contents, or secrets;
+- explicit `--allow-remote` LAN/deployment binding while retaining loopback as the safe default;
+- separate Connect Team, Plan & Assign, Graph Space, and Live Activity views, plus an accessible spatial relationship canvas;
+- a production mission plan for the real `Preethesh16/HardCoders_` Anchor repository at `examples/hardcoders-plan.json`;
 - a clearly labeled synthetic plan at `examples/spidey-plan.json`;
 - focused engine and CLI tests covering dynamic participants, direct risk, same-file risk, two-hop review, clear results, invalid targets, and command output.
 
@@ -100,12 +105,12 @@ go run ./cmd/entire-graph coordinate \
   --format text
 ```
 
-Run the integrated dashboard in two terminals:
+Run the production HardCoders visualization in two terminals:
 
 ```bash
 go run ./cmd/entire-graph coordinate \
-  --repo . \
-  --plan examples/spidey-plan.json \
+  --repo /path/to/HardCoders_ \
+  --plan examples/hardcoders-plan.json \
   --listen 127.0.0.1:4317
 ```
 
@@ -115,7 +120,20 @@ npm ci
 npm run dev
 ```
 
-The development server proxies `/api` to the loopback backend. Synthetic dashboard data remains only as an explicit test/demo fixture; production `App.tsx` loads the real API and renders honest loading or provider-error states. The Git panel reports that its adapter is not connected instead of displaying fabricated activity.
+The development server proxies `/api` to the loopback backend. The production browser opens on **Connect Team**: the leader creates a room and copies its invite; teammates join in their own browser, select a declared mission, and receive authenticated SSE presence updates. Browser presence is labeled honestly and never claims access to local Git or Entire metadata. Synthetic data remains test-only.
+
+For a LAN-accessible shared coordinator, persist credentials outside the repository and bind explicitly:
+
+```bash
+go run ./cmd/entire-graph coordinate \
+  --repo . --plan examples/spidey-plan.json \
+  --listen 0.0.0.0:4317 --allow-remote \
+  --network-state /var/lib/spidey-sense/network.json
+```
+
+Open the website, choose **Create room**, and share the displayed team ID and invite code. Teammates choose **Join invite** in the same website; no terminal onboarding is part of the product workflow. The optional `connect-agent` CLI remains available only when a teammate explicitly wants richer locally detected Entire/Git metadata that web sandboxing cannot access.
+
+Use HTTPS for a deployed server. Plain remote HTTP requires an explicit LAN-only opt-in.
 
 ## Entire Graph findings and verification
 
@@ -129,13 +147,22 @@ These findings were checked against focused source reads. Spidey Sense will cons
 
 ## Noon Curveball: what changed and how we adapted
 
-Not announced yet. The pre-Curveball architecture isolates inputs, policy, and presentation so a new provider, rule, output constraint, or reliability requirement can be added without replacing the coordination engine.
+**Track 2: Graph is evidence, not an oracle.** The curveball requires honest handling of dynamic dispatch, generated code, reflection, and other cases where static relationships may be partial.
+
+The pre-Curveball architecture already carried Graph confidence, resolution, warnings, partial failures, completeness, and a bounded `CLEAR` caveat. The implementation audit found four remaining gaps, now folded into the plan and implementation:
+
+1. Classify every decision and relationship as `confirmed`, `heuristic`, or `incomplete`.
+2. Prevent heuristic or repository-partial relationships from being presented as certain blockers; they become `REVIEW` evidence that requires verification.
+3. Return and render an explicit source/test verification path, plus warning and partial-failure counts.
+4. Test a degraded fixture containing unresolved dynamic dispatch and unavailable generated source.
+
+Entire Graph identified the runtime evidence consumer in `internal/coordinate/coordinate.go`, its text/API projection in `internal/cli/coordinate.go`, and the dashboard projection in `web/spidey-sense/src/api.ts`. `impact` is currently a development-time verification input, not user-facing runtime evidence. Checkpoint semantic diff remains a planned adapter and is not yet used to make dashboard claims; when added, it must use the same evidence classification and verification contract.
 
 ## Checkpoint links and what each checkpoint proves
 
 1. **Initial understanding and architecture:** this document, architecture, scope, prior-work disclosure, and Curveball seams.
 2. **Stable pre-Curveball implementation:** integrated dynamic team/session onboarding, revision-safe leader planning, Graph-backed coordination decisions, team-scoped checkpoints, loopback API, and tested React dashboard. Recorded by the checkpoint commit that marks this milestone.
-3. **Curveball response:** pending.
+3. **Curveball response:** Track 2 evidence classification, partial-analysis fallback, verification paths, and fixtures — commit `485d4a53`, Entire checkpoint `16ce4f58f28c`.
 4. **Final implementation and verification:** pending.
 
 Checkpoint IDs and links will be added as they are created.
@@ -162,11 +189,12 @@ The abstract “codebase as a place” idea was also studied in Claude Clan. No 
 
 - Observe only public session metadata and repository activity; never private chain-of-thought.
 - Treat prompts, file paths, identities, repository URLs, and activity as sensitive.
-- Keep the initial service local and bind to loopback.
+- Keep loopback as the default; require explicit remote binding and HTTPS outside trusted LAN development.
 - Never expose arbitrary shell execution through the dashboard.
 - Keep any future agent action explicit, allowlisted, and auditable.
 - Never commit tokens, credentials, live activity files, or private session data.
 - Surface Graph incompleteness and heuristic edges instead of claiming certainty.
+- Require source or test verification for heuristic, incomplete, and bounded-absence (`CLEAR`) claims.
 
 ## Visual identity
 
@@ -174,8 +202,9 @@ The interface uses an original spider-inspired night-radar aesthetic: web zones,
 
 ## Known limitations and next steps
 
-- The first demo targets sessions visible to one local coordinator; cross-machine live synchronization is future work.
+- The connector currently uses long-running heartbeats and server-sent events; reconnect credential reuse and production account recovery are future hardening work.
 - Agent-to-human identity mapping remains explicit.
 - Static analysis is heuristic and may miss dynamic dispatch or runtime wiring.
 - `CLEAR` means no risk was found within the analyzed scope, not proof of independence.
+- Checkpoint semantic diff is not yet a runtime dashboard input; no intent-drift claim is made from it.
 - GitHub network integration and direct agent messaging are intentionally outside the first stable slice.

@@ -2,6 +2,7 @@ export type MissionStatus = 'queued' | 'active' | 'blocked' | 'complete';
 export type RiskLevel = 'BLOCK' | 'REVIEW' | 'CLEAR';
 export type ProviderStatus = 'online' | 'degraded' | 'offline';
 export type RunnerStatus = 'active' | 'idle' | 'offline';
+export type EvidenceClass = 'confirmed' | 'heuristic' | 'incomplete';
 
 export interface Team {
   id: string;
@@ -47,6 +48,7 @@ export interface EvidenceRelation {
   type: string;
   confidence: number;
   resolution: 'resolved' | 'heuristic' | 'partial';
+  evidenceClass: EvidenceClass;
 }
 
 export interface RiskSignal {
@@ -59,6 +61,9 @@ export interface RiskSignal {
   relations: EvidenceRelation[];
   recommendation: string;
   reviewTargets: string[];
+  evidenceClass: EvidenceClass;
+  verificationRequired: boolean;
+  verification: string[];
 }
 
 export interface ProviderHealth {
@@ -94,6 +99,8 @@ export interface GraphSnapshot {
   analyzedDepth: number;
   complete: boolean;
   warning?: string;
+  warningCount: number;
+  partialFailureCount: number;
 }
 
 export interface DashboardSnapshot {

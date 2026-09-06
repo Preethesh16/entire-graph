@@ -38,7 +38,7 @@ export function RiskConsole({ risks, selectedRiskId, onSelectRisk }: RiskConsole
             >
               <span className="risk-card-top">
                 <StatusPill status={risk.level} />
-                <span>{risk.relations.length} relations</span>
+                <span>{risk.relations.length} relations · {risk.evidenceClass}</span>
               </span>
               <strong>{risk.title}</strong>
               <span>{risk.summary}</span>

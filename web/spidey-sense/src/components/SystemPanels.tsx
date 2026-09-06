@@ -104,6 +104,7 @@ export function GraphPanel({ graph }: GraphPanelProps) {
         <div><strong>{graph.relationCount.toLocaleString()}</strong><span>Relations</span></div>
         <div><strong>{graph.analyzedDepth}</strong><span>Depth</span></div>
       </div>
+      <p className="muted-copy">{graph.warningCount} warnings · {graph.partialFailureCount} partial failures</p>
       {graph.warning ? <p className="graph-warning">{graph.warning}</p> : null}
     </section>
   );
