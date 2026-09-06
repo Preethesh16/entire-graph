@@ -1,0 +1,17 @@
+Meet Spidey Sense: a production coordination surface for engineering teams working with coding agents and Entire Graph.
+
+The workflow begins in the browser. A team lead creates a secure signal room, enters their own name and role, and receives a private invite link. Identity is never invented. The browser reports only what it can actually observe.
+
+A teammate opens that link and joins from the website. No terminal onboarding is required. Authentication is scoped to the team member, and heartbeats contain bounded presence metadata. Prompts, reasoning, terminal contents, file contents, and secrets are never transmitted.
+
+Back in the lead view, the authenticated roster updates live. Every connected teammate becomes assignable through a stable member identifier—not fragile name matching.
+
+The planning surface captures the mission outcome, owner, status, target file, and optional source symbol. These declared targets drive repository analysis against the real HardCoders Anchor codebase.
+
+Graph Space maps missions to source evidence and dependency paths. Confirmed structural relationships are visually distinct from heuristic or incomplete evidence. This repository intentionally produces partial analysis warnings, so Spidey Sense does not pretend the graph is an oracle. Instead, it explains uncertainty and provides source inspection and focused test verification paths.
+
+Refresh Evidence rebuilds the local, no-egress graph as the repository changes. The current analysis contains more than four thousand six hundred nodes and fourteen thousand eight hundred relationships.
+
+Finally, Live Activity separates website presence from local Entire sessions. Missing branch, checkpoint, or changed-file information stays unavailable rather than being guessed.
+
+Spidey Sense turns graph evidence, human intent, and live team presence into one practical, truthful engineering workflow.
